@@ -61,7 +61,7 @@ option_list <- list(
               help="Keep only features with at least X% of data available across all batches, default 0.7 (70%)"),
   make_option(c("-p", "--samples_for_correlation"), action="store", default="DR:Digestion_batch,TR:Technical_batch", type="character",
               help="Digestion and Technical Rep Sample keywords from attribute_experimental group along with column to plot"),
-  make_option(c("-i", "--imputation_method"), action="store", default="rf", type="character",
+  make_option(c("-i", "--imputation_method"), action="store", default="ranger", type="character",
               help='Specify one of 
                          "zero","minimum","colmedian","rowmedian",
                          "knnmethod","seqknn","bpca","svdmethod",
@@ -69,7 +69,7 @@ option_list <- list(
                          "impseq","impseqrob",
                          "mice-norm","mice-cart","trknn",
                          "rf","pi","grr","gms", or "halfminimum", 
-                    default "rf"'),
+                    default "ranger"'),
   make_option(c("--iRT_protein_name"), action="store", default="irt_protein", type="character",
               help="Name of the iRT peptide, default 'irt_protein'"),
   make_option(c("-q", "--quantile_norm"), action="store_true", default=FALSE, type="logical",
@@ -84,20 +84,6 @@ option_list <- list(
 
 args = parse_args(OptionParser(option_list=option_list))
 #--------------------Pass args to .Rmd---------------------
-
-args$input_norm = "C:\\Users\\BhatA\\Box\\Batch_correction\\input_output_files\\Missing_ticnorm_429_with_DRTR.txt"
-args$input_unnorm = "C:\\Users\\BhatA\\Box\\Batch_correction\\input_output_files\\Complete_unnorm_429_with_DRTR.txt"
-args$metadata_annotation = "C:\\Users\\BhatA\\Box\\Batch_correction\\input_output_files\\Annotation_DRTR_integrated.txt"
-args$output_dir = "C:\\Users\\BhatA\\Box\\Batch_correction\\input_output_files\\test"
-args$outfile_prefix = "test"
-args$batch_column = "Digestion_batch"
-args$cols_of_interest = "Digestion_batch,MS_batch"
-args$sample_threshold = 0.99
-args$expgroup_threshold = 0.99
-args$batch_threshold = 0.99
-args$samples_for_correlation = "DigRep:Digestion_batch,TechRep:MS_batch"
-args$imputation_method = "ranger"
-args$iRT_protein_name = "1/iRT_protein"
 
 get_script_directory <- function(){
   commandArgs() %>% 
