@@ -125,6 +125,7 @@ suppressPackageStartupMessages({
   library(ggpubr)
   library(gtable)
   library(grid)
+  library(gridExtra)
   library(sqldf)
   library(pcaMethods)
   library(ComplexHeatmap)
@@ -197,6 +198,35 @@ colClean2 <- function(x){
 levels(x$Level3) <- gsub("-", "_", levels(x$Level3))
 levels(x$Level3) <- gsub("\\.", "_", levels(x$Level3))
 return(x)
+}
+
+minimal_filtering <- function(sample_matrix, annotation_data, group_by) {
+  results_matrix <- sample_matrix
+  results_matrix[is.na(results_matrix)] = 0
+  
+  overlaps <- pivot_longer(results_matrix, cols = c(everything(), -Protein), names_to = "FullRunName", values_to = "Intensity") %>% 
+    left_join(annotation_data, by="FullRunName") %>% 
+		dplyr::rename("SampleName" = "FullRunName" , "Group" := !!group_by ) %>% 
+		subset(select=c("Protein","Intensity","SampleName","Group"))
+  
+  missval <- overlaps %>%
+  mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+  dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+  summarise(Intensity = sum(Intensity)) %>% 
+  mutate(check = ifelse(Intensity < 2, 0, 1)) %>% 
+  group_by(Protein) %>% 
+  filter(any(check == 0)) %>%
+  summarise(Intensity = sum(Intensity))
+
+  # missval now contains only those proteins/fragments that need to be removed because they have batches with < 2 intensities in them
+  rownames(missval) <- missval$Protein
+  frags_to_remove = row.names(missval)
+  # removing from matrix if missval contains the fragment
+  sample_matrix = sample_matrix[!(sample_matrix$Protein %in%   frags_to_remove),]
+  
+  return(sample_matrix)
 }
 
 filter_samples <- function(df, annotation, sample_missingness, expgroup_missingness, batch_type, batch_missingness) {
@@ -1176,6 +1206,7 @@ iRT_protein <- args$iRT_protein_name
 IMPUTATION_METHOD <- args$imputation_method
 QUANTILE_NORM <- args$quantile_norm
 BATCH_CORRECT_FIRST <- args$batch_correction_first
+MINIMAL <- args$minimal
 PDF_WIDTH <- args$pdf_width
 PDF_HEIGHT <- args$pdf_length
 
@@ -1360,14 +1391,18 @@ plot_missbatch(overlaps, BATCH_NA_CUTOFF)
 ```
 
 ```{r Filter Samples, fig.width=12, echo=F, results='hide', fig.keep='all', message=FALSE, warning=FALSE}
-# Filter norm and unnorm
+# Remove fragments with batches that have < 2 intensities
+sample_matrix <- minimal_filtering(sample_matrix, annotation_data, BATCH_COL)
+sample_matrix_unnorm <- minimal_filtering(sample_matrix_unnorm, annotation_data, BATCH_COL)
 
+# Filter norm and unnorm
 sample_matrix <- filter_samples(sample_matrix, annotation_data, SAMPLE_NA_CUTOFF, EXPGRP_NA_CUTOFF, BATCH_COL, BATCH_NA_CUTOFF)
 sample_matrix_unnorm <- filter_samples(sample_matrix_unnorm, annotation_data, SAMPLE_NA_CUTOFF, EXPGRP_NA_CUTOFF, BATCH_COL, BATCH_NA_CUTOFF)
 
 annotation_data <- as.data.frame(sample_matrix[[2]])
 sample_matrix <- as.data.frame(sample_matrix[[1]])
 sample_matrix_unnorm <- as.data.frame(sample_matrix_unnorm[[1]])
+
 ```
 
 ```{r Preprocessing2, fig.width=12, echo=F, results='hide' ,fig.keep='all', message=FALSE, warning=FALSE}
