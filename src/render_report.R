@@ -76,8 +76,6 @@ option_list <- list(
               help="When flag is set, perform quantile normalization instead of using norm input from ProEpic"),
   make_option(c("-B", "--batch_correction_first"), action="store_true", default=FALSE, type="logical",
               help="When flag is set, perform batch correction before imputation. By default, performs imputation before batch correction."),
-  make_option(c("-M", "--minimal"), action="store_true", default=TRUE, type="logical",
-              help="When flag is set, perform minimal filtering where batches with < 2 fragment intensities are removed. By default, this filtering will be performed."),
   make_option(c("-w", "--pdf_width"), action="store", default=12, type="double",
               help="Set the width of the PDF output in inches, default 12"),
   make_option(c("-l", "--pdf_length"), action="store", default=7, type="double",
