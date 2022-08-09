@@ -10,12 +10,13 @@
 #}
 #invisible(sapply(packages, install_if_missing))
 
-packages_bio <- c("DEP", "proBatch", "pcaMethods", "ComplexHeatmap", "SummarizedExperiment")
+packages_bio <- c("DEP", "proBatch", "pcaMethods")
+#packages_bio <- c("ComplexHeatmap", "SummarizedExperiment")
 install_if_missing2 <- function(h) {
     if (!require("BiocManager", quietly = TRUE)) {
         install.packages("BiocManager")
         if (!h %in% rownames(installed.packages())) {
-            BiocManager::install(h)
+            BiocManager::install(h, clean=TRUE, quiet=TRUE)
         }
     }
 }
