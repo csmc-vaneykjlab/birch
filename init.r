@@ -2,7 +2,7 @@
 packages <- c("shiny", "shinyjs", "shinyalert", "shinyvalidate", "shinythemes", "shinycssloaders", "rsconnect", "DT", "tidyr", "textreadr", "optparse", "dplyr", "tibble", "ggplot2", "assertthat", "readr", "purrr", "tidyverse", "ggpubr", "ColorBrewer", "gtable", "grid", "gridExtra", "sqldf", "tools", "missRanger", "plotly")
 install_if_missing <- function(p) {
     if (!p %in% rownames(installed.packages())) {
-        install.packages(p)
+        install.packages(p, clean=TRUE, quiet=TRUE)
     }
 }
 invisible(sapply(packages, install_if_missing))
