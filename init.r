@@ -1,7 +1,7 @@
 ## Install R packages
 #packages <- c("shiny", "shinyjs", "shinyalert", "shinyvalidate", "shinythemes", "shinycssloaders", "rsconnect", "DT", "tidyr", "textreadr")
 #packages <- c("optparse", "dplyr", "tibble", "ggplot2", "assertthat", "readr", "purrr", "tidyverse")
-packages <- c("ggpubr", "ColorBrewer", "gtable", "grid", "gridExtra", "sqldf", "tools", "missRanger", "plotly")
+packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "sqldf", "tools", "missRanger", "plotly")
 install_if_missing <- function(p) {
     print(p)
     if (!p %in% rownames(installed.packages())) {
@@ -22,5 +22,5 @@ invisible(sapply(packages, install_if_missing))
 #}
 #invisible(sapply(packages_bio, install_if_missing2))
 
-
+install.packages("C:/ABhat/BatchCorrectionTool/localpkgs/DEP.tar.gz", repos=NULL, type="source")
 
