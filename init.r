@@ -22,5 +22,5 @@ invisible(sapply(packages, install_if_missing))
 #}
 #invisible(sapply(packages_bio, install_if_missing2))
 
-install.packages("/localpkgs/DEP.tar.gz", repos=NULL, type="source")
+install.packages("C:/ABhat/BatchCorrectionTool/localpkgs/DEP.tar.gz", repos=NULL, type="source")
 
