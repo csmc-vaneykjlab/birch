@@ -11,7 +11,7 @@
 #invisible(sapply(packages, install_if_missing))
 
 #packages_bio <- c("pcaMethods")
-packages_bio <- c("ComplexHeatmap", "SummarizedExperiment")
+packages_bio <- c("DEP", "proBatch", "ComplexHeatmap", "SummarizedExperiment")
 install_if_missing2 <- function(h) {
     if (!require("BiocManager", quietly = TRUE)) {
         install.packages("BiocManager")
@@ -23,5 +23,5 @@ install_if_missing2 <- function(h) {
 }
 invisible(sapply(packages_bio, install_if_missing2))
 
-install.packages(c("localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
+#install.packages(c("localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
 
