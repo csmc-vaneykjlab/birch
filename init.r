@@ -1,7 +1,7 @@
 ## Install R packages
 #packages <- c("shiny", "shinyjs", "shinyalert", "shinyvalidate", "shinythemes", "shinycssloaders", "rsconnect", "DT", "tidyr", "textreadr")
 #packages <- c("optparse", "dplyr", "tibble", "ggplot2", "assertthat", "readr", "purrr", "tidyverse")
-packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "sqldf", "tools", "missRanger", "plotly")
+packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "tools", "missRanger", "plotly")
 install_if_missing <- function(p) {
     print(p)
     if (!p %in% rownames(installed.packages())) {
@@ -26,7 +26,7 @@ invisible(sapply(packages_bio, install_if_missing2))
 
 #if (!require("BiocManager", quietly = TRUE)) {
 #install.packages("BiocManager")
-install.packages(c("localpkgs/GetoptLong.tar.gz", "localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
+install.packages(c("localpkgs/rjson.tar.gz", "localpkgs/GetoptLong.tar.gz", "localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
 #}
 
 
