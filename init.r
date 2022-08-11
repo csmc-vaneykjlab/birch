@@ -1,7 +1,7 @@
 ## Install R packages
 #packages <- c("shiny", "shinyjs", "shinyalert", "shinyvalidate", "shinythemes", "shinycssloaders", "rsconnect", "DT", "tidyr", "textreadr")
 #packages <- c("optparse", "dplyr", "tibble", "ggplot2", "assertthat", "readr", "purrr", "tidyverse")
-packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "tools", "missRanger", "plotly")
+packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "tools", "missRanger", "plotly", "ncdf4")
 install_if_missing <- function(p) {
     print(p)
     if (!p %in% rownames(installed.packages())) {
@@ -10,7 +10,7 @@ install_if_missing <- function(p) {
 }
 invisible(sapply(packages, install_if_missing))
 
-packages_bio <- c("pcaMethods", "SummarizedExperiment", "ncdf4")
+packages_bio <- c("pcaMethods", "SummarizedExperiment")
 install_if_missing2 <- function(h) {
 #    if (!require("BiocManager", quietly = TRUE)) {
 #        install.packages("BiocManager")
