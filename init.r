@@ -26,7 +26,7 @@ invisible(sapply(packages_bio, install_if_missing2))
 
 #if (!require("BiocManager", quietly = TRUE)) {
 #install.packages("BiocManager")
-install.packages(c("localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
+install.packages(c("localpkgs/GetoptLong.tar.gz", "localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
 #}
 
 
