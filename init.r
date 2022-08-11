@@ -10,7 +10,7 @@ install_if_missing <- function(p) {
 }
 invisible(sapply(packages, install_if_missing))
 
-packages_bio <- c("pcaMethods", "SummarizedExperiment")
+packages_bio <- c("pcaMethods", "SummarizedExperiment", "ncdf4")
 install_if_missing2 <- function(h) {
 #    if (!require("BiocManager", quietly = TRUE)) {
 #        install.packages("BiocManager")
@@ -26,7 +26,7 @@ invisible(sapply(packages_bio, install_if_missing2))
 
 #if (!require("BiocManager", quietly = TRUE)) {
 #install.packages("BiocManager")
-install.packages(c("localpkgs/ncdf4.tar.gz", "localpkgs/mzR.tar.gz", "localpkgs/MsCoreUtils_1.8.0.tar.gz", "localpkgs/MALDIquant_1.19.3.tar.gz", "localpkgs/MSnbase.tar.gz", "localpkgs/rjson_0.2.15.tar.gz", "localpkgs/GetoptLong.tar.gz", "localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
+install.packages(c("localpkgs/mzR.tar.gz", "localpkgs/MsCoreUtils_1.8.0.tar.gz", "localpkgs/MALDIquant_1.19.3.tar.gz", "localpkgs/MSnbase.tar.gz", "localpkgs/rjson_0.2.15.tar.gz", "localpkgs/GetoptLong.tar.gz", "localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz"), repos=NULL, type="source")
 #}
 
 
