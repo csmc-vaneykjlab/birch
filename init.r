@@ -30,7 +30,7 @@ invisible(sapply(packages_bio, install_if_missing2))
 #}
 
 d <- tempdir()
-untar("localpkgs/DEP.tar.gz", compressed="gzip", exdir=d)
+untar("localpkgs/DEP.tar.gz", exdir=d)
 devtools::install(file.path(d, "DEP"), dependencies=TRUE,
                   repos=BiocManager::repositories())
 
