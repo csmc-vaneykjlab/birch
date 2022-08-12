@@ -24,7 +24,7 @@
 #invisible(sapply(packages_bio, install_if_missing2))
 
 
-install.packages("devtools", mirror='https://cran.microsoft.com/snapshots/2020-03-01')
+#install.packages("devtools", mirror='https://cran.microsoft.com/snapshots/2020-03-01')
 
 
 #if (!require("BiocManager", quietly = TRUE)) {
@@ -32,9 +32,10 @@ install.packages("devtools", mirror='https://cran.microsoft.com/snapshots/2020-0
 #install.packages(c("localpkgs/ncdf4.tar.gz", "localpkgs/mzR.tar.gz", "localpkgs/MsCoreUtils_1.8.0.tar.gz", "localpkgs/MALDIquant_1.19.3.tar.gz", "localpkgs/MSnbase.tar.gz", "localpkgs/rjson_0.2.15.tar.gz", "localpkgs/GetoptLong.tar.gz", "localpkgs/ComplexHeatmap.tar.gz", "localpkgs/DEP.tar.gz", "localpkgs/proBatch.tar.gz", "localpkgs/stringi.tar.gz"), repos="https://cran.rstudio.com/", type="source", dependencies=TRUE)
 #}
 
-d <- tempdir()
-untar("localpkgs/DEP.tar.gz", exdir=d)
-devtools::install(file.path(d, "DEP"), dependencies=TRUE,
-                  repos=BiocManager::repositories())
+#d <- tempdir()
+#untar("localpkgs/DEP.tar.gz", exdir=d)
+#devtools::install(file.path(d, "DEP"), dependencies=TRUE,
+#                  repos=BiocManager::repositories())
 
 
+BiocManager::install("DEP", site_repository='https://cran.microsoft.com/snapshots/2020-03-01', force=TRUE, update=FALSE)
