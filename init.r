@@ -37,5 +37,5 @@
 #devtools::install(file.path(d, "DEP"), dependencies=TRUE,
 #                  repos=BiocManager::repositories())
 
-
-BiocManager::install("DEP", site_repository='https://cran.microsoft.com/snapshots/2020-03-01', force=TRUE, update=FALSE)
+install.packages("BiocManager")
+BiocManager::install("DEP", site_repository='https://cran.microsoft.com/snapshots/2020-03-01', force=TRUE, update=FALSE, version="3.10")
