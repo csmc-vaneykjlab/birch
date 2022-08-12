@@ -24,7 +24,7 @@
 #invisible(sapply(packages_bio, install_if_missing2))
 
 
-install.packages("localpkgs/devtools_2.4.4.tar.gz", repos=NULL, type="source")
+install.packages("devtools", mirror='https://cran.microsoft.com/snapshots/2020-03-01')
 
 
 #if (!require("BiocManager", quietly = TRUE)) {
