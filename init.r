@@ -1,7 +1,7 @@
 ## Install R packages
 #packages <- c("shiny", "shinyjs", "shinyalert", "shinyvalidate", "shinythemes", "shinycssloaders", "rsconnect", "DT", "tidyr", "textreadr")
 #packages <- c("optparse", "dplyr", "tibble", "ggplot2", "assertthat", "readr", "purrr", "tidyverse")
-packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "tools", "missRanger", "plotly", "devtools")
+packages <- c("ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "tools", "missRanger", "plotly")
 install_if_missing <- function(p) {
     print(p)
     if (!p %in% rownames(installed.packages())) {
@@ -22,6 +22,9 @@ install_if_missing2 <- function(h) {
     }
 }
 invisible(sapply(packages_bio, install_if_missing2))
+
+
+install.packages(c("localpkgs/devtools_2.4.4.tar.gz")
 
 
 #if (!require("BiocManager", quietly = TRUE)) {
