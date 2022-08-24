@@ -84,9 +84,11 @@ As a note: If all thresholds are set to 1.0 (i.e., you don't want to filter anyt
 On hitting continue, a few plots will be displayed in the main tab that show how the filtering criteria chosen by you will affect the data and what will be filtered out. Simultaneously, the results tab becomes active. 
 
 ### Results tab
-The results tab is the final tab which is static and is loaded with all the final results, including plots created using filtered data, nomalization and other batch-correction related results. The sub-sections within the results tab are as shown in the below image. 
+The results tab is the final tab that is static and is loaded with all the final results, including plots created using filtered data, results comparing nomalized and unnormalized files, and other batch-correction related results. The sub-sections within the results tab are as shown in the below image. 
 
 ![BIRCH results](Images/results.PNG)
+
+The final batch-corrected data (pre and post-imputation) can be downloaded in the "Downloads" sub-section in the results tab. Additionally, an HTML report that contains all the results/plots from the web-app can also be downloaded for convinience. 
 
 ## Cite us
 
