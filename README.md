@@ -51,7 +51,7 @@ Here are some specifications to make sure the input files abide by the requireme
 3. Columns with sample names in the normalized and unnormalized files should match with the sample names in the annotation files. Number of samples in annotation file and intensity data files should be the same. 
 4. Annotation file should have columns corresponding to the different batches you want to analyze (eg. MS batch, Digestion batch, Differentiation batch, etc.), along with the biological experimental group. 
 
-Once the data is uploaded, a preview of the uploaded data will be visible in the main panel and the next "Initial analysis" tab becomes active. 
+Once the data is uploaded, a preview of the uploaded data will be visible in the main panel and the next Initial analysis and Diagnosis tabs becomes active. 
 
 ### Initial analysis tab
 This is a static tab that displays some plots with initial analysis that are generated using the data uploaded in the settings page. This tab in-turn has 3 sub-parts that are characterized as Sample distribution, Missingness and Take-away.  
@@ -68,9 +68,9 @@ The Diagnosis tab is the next dynalic tab where user input is required. In this 
 
 ![BIRCH diagnosis 1](Images/diagnosis_1.PNG)
 
-On hitting the submit button after these options are provided, missing data is imputed and a PVCA is generated. Using the PVCA, the algorithm makes a decision on which batch to correct on (based on the columns to correct for batch-effect, as provided in the settings tab), and a note with the column to correct on will be displayed below the PVCA. Additionally, the left panel is populated with additional parameters once the PVCA is generated. 
+On hitting the submit button after these options are provided, missing data is imputed and a PVCA is generated in the main panel. Using the PVCA, the algorithm makes a decision on which batch to correct on (based on the columns to correct for batch-effect, as provided in the settings tab), and a note with the column to correct on will be displayed below the PVCA. Additionally, the left panel is populated with additional parameters once the PVCA is generated. 
 
-![BIRCH diagnosis 1](Images/diagnosis_2.PNG)
+![BIRCH diagnosis 2](Images/diagnosis_2.PNG)
 
 If your biological group has the most variation to begin with, a note saying batch-correction is not required for your data will be generated. If you still want to batch-correct, select the variable to correct on in the left panel.
 
@@ -79,14 +79,19 @@ Lastly, in addition to the column to correct on, you can choose "experimental gr
 2. Experimental group threshold - This filter is applied to make sure each experimental/biological group has a certain percentage of intensities that are present. We usually keep a cut-off of 50% for this filter and if any feature/fragment/protein has all experimental groups with over 50% missingness, it will be dropped.
 3. Batch threshold - This is applied to make sure each batch (within variable/column to correct on) has a certain percentage of intensities that are present (non-missing). Features/fragments/proteins having missingness more than the specified threshold will be dropped. 
 
-As a note: If all thresholds are set to 1.0 (i.e., you don't want to filter anything, we will carry out minimal filtering by default (at least 2 non-missing intensities per batch). 
+As a note: If all thresholds are set to 1.0 (i.e., you don't want to filter anything), we will carry out minimal filtering by default (at least 2 non-missing intensities per batch). 
+
+On hitting continue, a few plots will be displayed in the main tab that show how the filtering criteria chosen by you will affect the data and what will be filtered out. Simultaneously, the results tab becomes active. 
 
 ### Results tab
+The results tab is the final tab which is static and is loaded with all the final results, including plots created using filtered data, nomalization and other batch-correction related results. The sub-sections within the results tab are as shown in the below image. 
+
+![BIRCH results](Images/results.PNG)
 
 ## Cite us
 
 ## Support
-If you encounter any bugs or issues, please help us improve PINE by creating a new issue at: https://github.com/csmc-vaneykjlab/pine/issues
+If you encounter any bugs or issues, please help us improve PINE by creating a new issue at: XXX
 For any other queries, email us at GroupHeartBioinformaticsSupport@cshs.org.
 
 ## Release notes
