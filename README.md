@@ -4,7 +4,7 @@
 - [What is BIRCH](#what-is-birch)
 - [Requirements](#requirements)
 - [Example usage](#example-usage)
-- [Using BIRCH](#using-pine-gui)
+- [Using BIRCH](#using-birch)
 - [Cite us](#cite-us)
 - [Support](#support)
 - [Release notes](#release-notes)
