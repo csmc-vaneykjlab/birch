@@ -25,7 +25,7 @@ Please refer to our example (XXX link it later) for a walkthrough on how to use 
 ### Settings and Input files
 When the BIRCH web-app first loads, the settings tab is seen.
 
-![BIRCH settings page](Image/settings.PNG)
+![BIRCH settings page](Images/settings.PNG)
 
 In this tab, you will have to upload 3 files:
 1. Normalized data 
