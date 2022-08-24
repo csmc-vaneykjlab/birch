@@ -25,6 +25,8 @@ The general workflow is as follows:
 
 ![BIRCH workflow](Images/workflow.PNG)
 
+Below we list each tab with a description of it includes. For details on the results generated and to understand how to use the plots/analysis, please refer to the example usage above. 
+
 ### Settings tab
 When the BIRCH web-app initially loads, the settings tab is displayed at first.
 
@@ -59,6 +61,25 @@ This is a static tab that displays some plots with initial analysis that are gen
 The sample distribution section displays a plot with the number of samples in each batch (as chosen in the settings tab). The missingness section displays multiple plots that shows how much of the input data is missing/NA, this will also give you an idea of how much data will be imputed in the next step. Lastly, the take-away section gives breif statistics on sample distribution and missingness, which inturn helps with taking a decision on whether the data is suitable for batch correction. 
 
 ### Diagnosis tab
+The Diagnosis tab is the next dynalic tab where user input is required. In this tab, you will first need to provide 3 parameters:
+1. Imputation method - BIRCH provides two options for imputing missing values. Imputation is required for generating a PVCA and other results that are necessary to draw conclusions on batch-correction. The half-minimum method is faster but not very efficient in terms of results, while ranger takes longer and uses random-forests to impute missing values. 
+2. Prefix for output files -  The final results tab has a section to download results from. Using this option, you can provide a prefix for your downloadable files based on your project specifications. 
+3. iRT protein name - This is an optional field where you can provide the name of your iRT protein. This is make additional plots regarding the iRT protein in the results tab. 
+
+![BIRCH diagnosis 1](Images/diagnosis_1.PNG)
+
+On hitting the submit button after these options are provided, missing data is imputed and a PVCA is generated. Using the PVCA, the algorithm makes a decision on which batch to correct on (based on the columns to correct for batch-effect, as provided in the settings tab), and a note with the column to correct on will be displayed below the PVCA. Additionally, the left panel is populated with additional parameters once the PVCA is generated. 
+
+![BIRCH diagnosis 1](Images/diagnosis_2.PNG)
+
+If your biological group has the most variation to begin with, a note saying batch-correction is not required for your data will be generated. If you still want to batch-correct, select the variable to correct on in the left panel.
+
+Lastly, in addition to the column to correct on, you can choose "experimental group:batch" combination to study correlation in replicates. At this stage you also get 3 options for filtering (scroll bar set to defaults) which include:
+1. Sample threshold - To identify samples with a lot of missingness. Samples that have missingness above the given threshold will be dropped. 
+2. Experimental group threshold - This filter is applied to make sure each experimental/biological group has a certain percentage of intensities that are present. We usually keep a cut-off of 50% for this filter and if any feature/fragment/protein has all experimental groups with over 50% missingness, it will be dropped.
+3. Batch threshold - This is applied to make sure each batch (within variable/column to correct on) has a certain percentage of intensities that are present (non-missing). Features/fragments/proteins having missingness more than the specified threshold will be dropped. 
+
+As a note: If all thresholds are set to 1.0 (i.e., you don't want to filter anything, we will carry out minimal filtering by default (at least 2 non-missing intensities per batch). 
 
 ### Results tab
 
