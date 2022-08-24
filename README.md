@@ -15,31 +15,64 @@
 
 ## Requirements
 - Web Browser (Google Chrome, Mozilla Firefox, Microsoft Edge, Safari) with stable internet connection. 
-- Input files with protein intensitites and an annotations (explained in detail in the next section). 
+- Input files with protein intensitites and an annotation file (explained in detail in the next section). 
 
 ## Example usage
-Please refer to our example (XXX link it later) for a walkthrough on how to use BIRCH.
+Please refer to our example (XXX link it later) for a more detailed and hands-on walkthrough on how to use BIRCH.
 
 ## Using BIRCH
+The general workflow is as follows:
 
-### Settings and Input files
-When the BIRCH web-app first loads, the settings tab is seen.
+![BIRCH workflow](Images/workflow.PNG)
+
+### Settings tab
+When the BIRCH web-app initially loads, the settings tab is displayed at first.
 
 ![BIRCH settings page](Images/settings.PNG)
+
+This tab is dynamic, and you will be asked to upload files and choose input parameters. The left side panel allows you to make your choices, while the right side main panel will display a pre-view of the files you uploaded.  
 
 In this tab, you will have to upload 3 files:
 1. Normalized data 
 2. Unnormalized data 
 3. Annotation file
 
-Additionally, you will be provided with dropdown menus to select the following mandatory parameters:
-1. Column representing the protein name in the normalized and unnormalized files.
-2. Columns to correct for batch-effect (can choose multiple based on your experiment set-up).
-3. Column containing the experimental/biological group (this is the group in which we want to retain variation coming from meaningful biological differences).
-4. Column with sample names that match the headers in the normalized and unnormalized file. 
+Additionally, you will be provided with dropdown menus generated using the uploaded data to select the mandatory parameters that are as follows:
+1. From normalized and unnormalized files - Option to choose the column representing the protein names.
+2. From annotation file - Choose the columns to correct for batch-effect (you can choose multiple options based on your experiment design).
+3. From annotation file - Choose the column containing the experimental/biological group (this is the group in which we want to retain variation coming from meaningful biological differences).
+4. From annotation file - Select the column with sample names that match the headers in the normalized and unnormalized file. 
+
+Here are some specifications to make sure the input files abide by the requirements:
+1. The normalized and unnormalized files should have the same rows and columns, only the intensities should vary depending on the normalization procedure used. 
+2. The protein names should be provided as the first column in the normalized and unnormalized files, followed by columns corresponding to one sample each with the intensities. 
+3. Columns with sample names in the normalized and unnormalized files should match with the sample names in the annotation files. Number of samples in annotation file and intensity data files should be the same. 
+4. Annotation file should have columns corresponding to the different batches you want to analyze (eg. MS batch, Digestion batch, Differentiation batch, etc.), along with the biological experimental group. 
+
+Once the data is uploaded, a preview of the uploaded data will be visible in the main panel and the next "Initial analysis" tab becomes active. 
 
 ### Initial analysis tab
+This is a static tab that displays some plots with initial analysis that are generated using the data uploaded in the settings page. This tab in-turn has 3 sub-parts that are characterized as Sample distribution, Missingness and Take-away.  
+
+![BIRCH initial analysis page](Images/initial_analysis.PNG)
+
+The sample distribution section displays a plot with the number of samples in each batch (as chosen in the settings tab). The missingness section displays multiple plots that shows how much of the input data is missing/NA, this will also give you an idea of how much data will be imputed in the next step. Lastly, the take-away section gives breif statistics on sample distribution and missingness, which inturn helps with taking a decision on whether the data is suitable for batch correction. 
 
 ### Diagnosis tab
 
 ### Results tab
+
+## Cite us
+
+## Support
+If you encounter any bugs or issues, please help us improve PINE by creating a new issue at: https://github.com/csmc-vaneykjlab/pine/issues
+For any other queries, email us at GroupHeartBioinformaticsSupport@cshs.org.
+
+## Release notes
+### Version 2.0.1
+- Initial version released.
+- Three input files required.
+- Displays whether combat only or combat+loess should be used for downstream analysis. 
+
+## License
+See the [LICENSE](https://github.com/csmc-vaneykjlab/pine/blob/master/LICENSE) file for license rights and limitations (Apache 2.0).
