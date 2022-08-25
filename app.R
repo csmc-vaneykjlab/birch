@@ -33,6 +33,11 @@ library(missRanger)
 #library(iheatmapr)
 library(plotly)
 
+############## function to help with validation
+`%then%` <- function(a, b) {
+  if (is.null(a)) b else a
+}
+
 ########## Functions from bc script
 #Replace hyphens in colnames with underscore
 colClean <- function(x){ 
@@ -752,6 +757,11 @@ methods <- c("halfminimum", "ranger")
 ui <- tagList(
   fluidPage(theme = shinytheme("sandstone"),
     shinyjs::useShinyjs(),
+    tags$style(HTML("
+      .shiny-output-error-validation {
+        color: orange;
+      }
+    ")),
     tags$script(
       'function checkifrunning() {
         var is_running = $("html").attr("class").includes("shiny-busy");
@@ -780,7 +790,8 @@ ui <- tagList(
         100% { transform: rotate(360deg); }
       }"
     ),
-    tabsetPanel(
+    tags$head(tags$script(type="text/javascript", src = "logo.js")),
+    navbarPage(title="",
       id="maintab",
       tabPanel(
         "Settings",
@@ -800,10 +811,12 @@ ui <- tagList(
           
           h5(strong("Normalized file preview:")),
           dataTableOutput("norm_table"),
+          linebreaks(2),
           hr(style = "border-top: 1px solid #000000;"),
           
           h5(strong("Unnormalized file preview:")),
           dataTableOutput("unnorm_table"),
+          linebreaks(2),
           hr(style = "border-top: 1px solid #000000;"),
           
           h5(strong("Annotation file preview:")),
@@ -979,13 +992,15 @@ ui <- tagList(
                    hr(style = "border-top: 1px solid #000000;"),
                    
                    h5(strong("Primary files for down-stream analysis:")),
-                   downloadButton("after_combat_preimpute", "After combat batch-correction, pre-imputed file"),
+                   textOutput("bc_type_selection_note"),
                    linebreaks(2),
                    downloadButton("after_preimpute", "After complete batch-correction, pre-imputed file"),
                    linebreaks(2),
-                   downloadButton("after_combat_postimpute", "After combat batch-correction, post-imputation file"),
-                   linebreaks(2),
                    downloadButton("after_postimpute", "After complete batch-correction, post-imputation file"), 
+                   linebreaks(2),
+                   downloadButton("after_combat_preimpute", "After combat batch-correction, pre-imputed file"),
+                   linebreaks(2),
+                   downloadButton("after_combat_postimpute", "After combat batch-correction, post-imputation file"),
                    linebreaks(2),
                    hr(style = "border-top: 1px solid #000000;"),
                    
@@ -1020,26 +1035,33 @@ server <- function(input, output, session) {
   iv$enable()
   
   # disable tabs
-  shinyjs::disable(selector = '.nav-tabs a[data-value="Initial analysis"')
-  shinyjs::disable(selector = '.nav-tabs a[data-value="Diagnosis"')
-  shinyjs::disable(selector = '.nav-tabs a[data-value="Results"')
+  shinyjs::disable(selector = '.navbar-nav a[data-value="Initial analysis"')
+  shinyjs::disable(selector = '.navbar-nav a[data-value="Diagnosis"')
+  shinyjs::disable(selector = '.navbar-nav a[data-value="Results"')
   
-  ########### Display norm file
+  ########### Check norm file and display it
   output$norm_table <- renderDataTable({
-    req(input$norm_file)
-    file <- input$norm_file
+    # validate issues in file
+    validate(
+      need(!is.null(input$norm_file),
+           "Please upload normalized data file")
+    )
     
-    if (is.null(file)){
-      returnValue(data.frame(Description="Please upload normalized file"))
-    } else {
-      data<-read.delim(file$datapath, header = TRUE)
-      #if(c("ProteinName", "PeptideSequence", "FragmentIon") %in% names(data)) {
-      return(datatable(data, options = list(pageLength = 10)))
-      #} else{
-      #  shinyalert("Column Error","Please upload normalized data file that contains columns/column-names with ProteinName, PeptideSequence and FragmentIon.",type="error")
-      #  returnValue(data.frame(Error="Please fix column error and reload the file"))
-      #}
-    }
+    # read file once provided
+    file <- input$norm_file
+    data <- read.delim(file$datapath, header = TRUE)
+    check <- select_if(data, is.numeric)
+    ncol_norm <- ncol(data)
+    ncol_check <- ncol(check)
+    
+    # validate issues in file
+    validate(
+      need(ncol_check == (ncol_norm-1),
+           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!")
+    )
+    
+    # If everything passes, print file
+    return(datatable(data, options = list(pageLength = 10)))
   })
   
   norm_file_name <- reactive({ 
@@ -1047,22 +1069,42 @@ server <- function(input, output, session) {
     return(file$datapath)
   })
   
-  ########### Display unnorm file
+  ########### Check unnorm file and display it
   output$unnorm_table <- renderDataTable({
-    req(input$unnorm_file)
-    file <- input$unnorm_file
+    # validate issues in file
+    validate(
+      need(!is.null(input$unnorm_file),
+           "Please upload unnormalized data file")
+    )
     
-    if (is.null(file)){
-      returnValue(data.frame(Description="Please upload unnormalized file"))
-    } else {
-      data<-read.delim(file$datapath, header = TRUE)
-      #if(c("ProteinName", "PeptideSequence", "FragmentIon") %in% names(data)) {
-      return(datatable(data, options = list(pageLength = 10)))
-      #} else{
-      #  shinyalert("Column Error","Please upload unnormalized data file that contains columns/column-names with ProteinName, PeptideSequence and FragmentIon.",type="error")
-      #  returnValue(data.frame(Error="Please fix column error and reload the file"))
-      #}
-    }
+    # read file once provided
+    file_unnorm <- input$unnorm_file
+    data_unnorm <- read.delim(file_unnorm$datapath, header = TRUE)
+    check_unnorm <- select_if(data_unnorm, is.numeric)
+    ncol_unnorm <- ncol(data_unnorm)
+    ncol_check_unnorm <- ncol(check_unnorm)
+    nrow_unnorm <- nrow(data_unnorm)
+    
+    # read norm file again to make sure ncol, nrow in norm and unnorm are same
+    file_norm <- input$norm_file
+    data_norm <- read.delim(file_norm$datapath, header = TRUE)
+    check_norm <- select_if(data_norm, is.numeric)
+    ncol_norm <- ncol(data_norm)
+    ncol_check_norm <- ncol(check_norm)
+    nrow_norm <- nrow(data_norm)
+    
+    # validate issues in file
+    validate(
+        need(ncol_check_unnorm == (ncol_unnorm-1),
+            "Please upload unnormalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!") #%then%
+        #need(ncol_unnorm == ncol_norm,
+        #    "Make sure number of columns/samples are same in unnormalized and normalized files, kindly re-load the data accordingly.") %then%
+        #need(nrow_unnorm == nrow_norm,
+        #     "Make sure number of rows/proteins are same in unnormalized and normalized files, kindly re-load the data accordingly.")
+    )
+    
+    # If everything passes, print file
+    return(datatable(data_unnorm, options = list(pageLength = 10)))
   })
   
   unnorm_file_name <- reactive({ 
@@ -1199,12 +1241,12 @@ server <- function(input, output, session) {
   
   ###### Activate initial anal and filtering tab
   observeEvent(input$nextId, {
-    updateTabsetPanel(
+    updateNavbarPage(
       inputId = "maintab",
       selected = "Initial analysis"
     )
-    shinyjs::enable(selector = '.nav-tabs a[data-value="Initial analysis"')
-    shinyjs::enable(selector = '.nav-tabs a[data-value="Diagnosis"')
+    shinyjs::enable(selector = '.navbar-nav a[data-value="Initial analysis"')
+    shinyjs::enable(selector = '.navbar-nav a[data-value="Diagnosis"')
   })
   
   ########### Generate initial analysis results
@@ -1973,7 +2015,7 @@ server <- function(input, output, session) {
   
   ####### Activate Results tab
   observeEvent(input$continue, {
-    shinyjs::enable(selector = '.nav-tabs a[data-value="Results"')
+    shinyjs::enable(selector = '.navbar-nav a[data-value="Results"')
   })
   
   #observeEvent(input$continue, {
@@ -1997,12 +2039,28 @@ server <- function(input, output, session) {
                              plot_title = "Before Batch Correction")
     plot <- pvca_before
     
-    #pvca_plot_data <- ggplot_build(plot)$plot$data
-    #plot_data_string <- toString(pvca_plot_data)
-    #var_to_correct_on <- toString(pvca_plot_data[1, "label"])
+    pvca_plot_data_before_bc <- ggplot_build(plot)$plot$data
+    plot_data_string <- toString(pvca_plot_data_before_bc)
+    var_to_correct_on <- toString(pvca_plot_data_before_bc[1, "label"])
     
-    plot <- annotate_figure(plot, top = text_grob("Before Batch Correction", color = "black", face = "bold", size = 15))
-    return(plot)
+    pvca_dict_before_bc <- c()
+    for (i in 1:nrow(pvca_plot_data_before_bc)) {
+      #print(i)
+      label = toString(pvca_plot_data_before_bc[i, "label"])
+      weight = as.numeric(pvca_plot_data_before_bc[i, "weights"])
+      pvca_dict_before_bc[label] <- weight
+    }
+    
+    pvca_plot <- annotate_figure(plot, top = text_grob("Before Batch Correction", color = "black", face = "bold", size = 15))
+    
+    to_return <- list(pvca_dict_before_bc = pvca_dict_before_bc, pvca_plot = pvca_plot)
+    return(to_return)
+  })
+  
+  pvca_dict_before_bc <- reactive ({
+    data <- pvca_before_bc_reac2()
+    data_dict <- data$pvca_dict_before_bc
+    return(data_dict)
   })
   
   hca_before_bc_reac <- reactive({
@@ -2160,8 +2218,9 @@ server <- function(input, output, session) {
   
   output$pvca_before_bc <- renderPlot({
     req(input$continue)
-    p <- pvca_before_bc_reac2()
-    print(p)
+    data <- pvca_before_bc_reac2()
+    pvca_plot <- data$pvca_plot
+    return(pvca_plot)
   })
   
   output$pca_before_bc <- renderPlot({
@@ -2300,13 +2359,37 @@ server <- function(input, output, session) {
                             biological_factors = biological_factors,
                             plot_title = "After combat only batch-correction")
     plot <- pvca_after
-    plot <- annotate_figure(plot, top = text_grob("After combat only batch-correction", color = "black", face = "bold", size = 15))
-    return(plot)
+    
+    pvca_plot_data_after_across <- ggplot_build(plot)$plot$data
+    plot_data_string <- toString(pvca_plot_data_after_across)
+    var_to_correct_on <- toString(pvca_plot_data_after_across[1, "label"])
+    
+    pvca_dict_after_across <- c()
+    for (i in 1:nrow(pvca_plot_data_after_across)) {
+      #print(i)
+      label = toString(pvca_plot_data_after_across[i, "label"])
+      weight = as.numeric(pvca_plot_data_after_across[i, "weights"])
+      #print(label)
+      #print(weight)
+      pvca_dict_after_across[label] <- weight
+    }
+    
+    pvca_plot <- annotate_figure(plot, top = text_grob("After combat and loess batch-correction", color = "black", face = "bold", size = 15))
+    
+    to_return <- list(pvca_dict_after_across = pvca_dict_after_across, pvca_plot = pvca_plot)
+    return(to_return)
+  })
+  
+  pvca_dict_after_across <- reactive ({
+    data <- pvca_after_across_bc_reac()
+    data_dict <- data$pvca_dict_after_across
+    return(data_dict)
   })
   
   output$pvca_after_across_bc <- renderPlot({
-    p <- pvca_after_across_bc_reac()
-    print(p)
+    data <- pvca_after_across_bc_reac()
+    pvca_plot <- data$pvca_plot
+    return(pvca_plot)
   })
   
   pvca_after_bc_reac <- reactive({
@@ -2323,13 +2406,34 @@ server <- function(input, output, session) {
                             biological_factors = biological_factors,
                             plot_title = "After combat and loess batch-correction")
     plot <- pvca_after
-    plot <- annotate_figure(plot, top = text_grob("After combat and loess batch-correction", color = "black", face = "bold", size = 15))
-    return(plot)
+    
+    pvca_plot_data_after_bc <- ggplot_build(plot)$plot$data
+    plot_data_string <- toString(pvca_plot_data_after_bc)
+    var_to_correct_on <- toString(pvca_plot_data_after_bc[1, "label"])
+    
+    pvca_dict_after_bc <- c()
+    for (i in 1:nrow(pvca_plot_data_after_bc)) {
+      label = toString(pvca_plot_data_after_bc[i, "label"])
+      weight = as.numeric(pvca_plot_data_after_bc[i, "weights"])
+      pvca_dict_after_bc[label] <- weight
+    }
+    
+    pvca_plot <- annotate_figure(plot, top = text_grob("After combat and loess batch-correction", color = "black", face = "bold", size = 15))
+    
+    to_return <- list(pvca_dict_after_bc = pvca_dict_after_bc, pvca_plot = pvca_plot)
+    return(to_return)
+  })
+  
+  pvca_dict_after_bc <- reactive ({
+    data <- pvca_after_bc_reac()
+    data_dict <- data$pvca_dict_after_bc
+    return(data_dict)
   })
   
   output$pvca_after_bc <- renderPlot({
-    p <- pvca_after_bc_reac()
-    print(p)
+    data <- pvca_after_bc_reac()
+    pvca_plot <- data$pvca_plot
+    return(pvca_plot)
   })
   
   pca_after_across_bc_reac <- reactive({
@@ -2586,6 +2690,121 @@ server <- function(input, output, session) {
   output$corr_after_bc <- renderPlotly({
     p <- corr_after_bc_reac()
     print(p)
+  })
+  
+  ########## Downloads section
+  # First figure out if combat only or combat+loess was required
+  bc_type_selection <- reactive({
+    req(input$continue)
+    
+    # get all the dictionaries containing pvca data
+    pvca_dict_before_bc <- pvca_dict_before_bc()
+    pvca_dict_after_across <- pvca_dict_after_across()
+    pvca_dict_after_bc <- pvca_dict_after_bc()
+    
+    # get selected annotations
+    check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
+    technical_factors <- check_cols_of_interest
+    exp_grp <- exp_grp_val()
+    biological_factors <- c(exp_grp)
+    selected_annotations <- c(technical_factors,biological_factors)
+    
+    pvca_after_across_score <- 0
+    for (i in selected_annotations) {
+      # make sure exp grp and cols of int are in pvca data
+      if (i %in% names(pvca_dict_after_across)) {
+        # for exp grp, make sure after correction is more than half of before correction. Add score if it is. 
+        if (i == exp_grp) {
+          if (pvca_dict_after_across[i] > (pvca_dict_before_bc[i]/2)) {
+            pvca_after_across_score = pvca_after_across_score + 1
+          }
+        }
+        # for other cols of int make sure the variation is lesser than before correction
+        else if (pvca_dict_after_across[i] < pvca_dict_before_bc[i]) {
+          pvca_after_across_score = pvca_after_across_score + 1
+        }
+      }
+      # when a column of int is not in pvca data
+      else {
+        # if exp grp is not in pvca data, that is bad because that means variation in exp grp is completely removed so make score zero
+        if (i == exp_grp) {
+          pvca_after_across_score = 0
+        }
+        # if other cols of int are not in pvca data, that means variation in it has disappeared after bc, which is good, so turn score to +1. 
+        else {
+          pvca_after_across_score = pvca_after_across_score + 1
+        }
+      }
+    }
+    print("pvca_after_across_score")
+    print(pvca_after_across_score)
+    
+    pvca_after_bc_score <- 0
+    for (i in selected_annotations) {
+      if (i %in% names(pvca_dict_after_bc)) {
+        if (i == exp_grp) {
+          if (pvca_dict_after_bc[i] > (pvca_dict_before_bc[i]/2)) {
+            pvca_after_bc_score = pvca_after_bc_score + 1
+          }
+        }
+        else if (pvca_dict_after_bc[i] < pvca_dict_before_bc[i]) {
+          pvca_after_bc_score = pvca_after_bc_score + 1
+        }
+      }
+      else {
+        if (i == exp_grp) {
+          pvca_after_bc_score = 0
+        }
+        else {
+          pvca_after_bc_score = pvca_after_bc_score + 1
+        }
+      }
+    }
+    print("pvca_after_bc_score")
+    print(pvca_after_bc_score)
+    
+    # Get final score
+    BATCH_COL <- var_to_correct_on_final()
+    final_score <- ""
+    
+    # If the scores are same
+    if (pvca_after_across_score == pvca_after_bc_score) {
+      # when both scores for after across and after complete are in the pvca data
+      # get the one which has least variation in pvca data and assing that as the final one to use
+      if (BATCH_COL %in% names(pvca_dict_after_across) && BATCH_COL %in% names(pvca_dict_after_bc)) {
+        after_across_bc_val <- pvca_dict_after_across[BATCH_COL]
+        after_bc_val <-  pvca_dict_after_bc[BATCH_COL]
+        if (after_bc_val < after_across_bc_val) {
+          final_score = "complete"
+        } else {
+          final_score = "across"
+        }
+        # if only after across variation exists, it means after bc variation is completely removed, so choose after bc
+      } else if (BATCH_COL %in% names(pvca_dict_after_across)) {
+        final_score = "complete"
+        # if only after bc variation exists, it means after across variation is completely removed, so choose after across
+      } else {
+        final_score = "across"
+      }
+      # if the scores are different, assing the greater one as the final score
+    } else {
+      if (pvca_after_bc_score > pvca_after_across_score) {
+        final_score = "complete"
+      } else {
+        final_score = "across"
+      }
+    }
+    
+    return(final_score)
+  })
+  
+  output$bc_type_selection_note <- renderText ({
+    final_score <- bc_type_selection()
+    if (final_score == "complete") {
+      return("Based on PVCA plots, we recommend you use combat+loess (complete) data for downstream analysis since variation in experimental group is maintained, and variation in other columns of interest have reduced with this type of batch correction. These are the first two files in this section below.")
+    } else if (final_score == "across") {
+      return("Based on PVCA plots, we recommend you use combat only data for downstream analysis since variation in experimental group is maintained, and variation in other columns of interest have reduced with this type of batch correction. These are the last two files in this section below.")
+    }
   })
   
   output$filtnorm <- downloadHandler(
