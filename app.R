@@ -4,7 +4,6 @@ library(shinyalert)
 library(shinyvalidate)
 library(shinythemes)
 library(shinycssloaders)
-library(shinyFeedback)
 library(rsconnect)
 library(DT)
 library(tidyr)
@@ -757,7 +756,6 @@ methods <- c("halfminimum", "ranger")
 ################### ui
 ui <- tagList(
   fluidPage(theme = shinytheme("sandstone"),
-    shinyFeedback::useShinyFeedback(),
     shinyjs::useShinyjs(),
     tags$style(HTML("
       .shiny-output-error-validation {
@@ -1062,8 +1060,7 @@ server <- function(input, output, session) {
     # validate issues in file
     validate(
       need(ncol_check == (ncol_norm-1),
-           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!"),
-      shinyFeedback::feedbackDanger("norm_file", ncol_check != (ncol_norm-1), "")
+           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!")
     )
     
     # If everything passes, print file
