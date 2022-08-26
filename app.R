@@ -756,6 +756,7 @@ methods <- c("halfminimum", "ranger")
 ################### ui
 ui <- tagList(
   fluidPage(theme = shinytheme("sandstone"),
+    shinyFeedback::useShinyFeedback(),
     shinyjs::useShinyjs(),
     tags$style(HTML("
       .shiny-output-error-validation {
@@ -796,18 +797,21 @@ ui <- tagList(
       tabPanel(
         "Settings",
         sidebarPanel(
-          fileInput("norm_file", "1. Choose normalized file", accept = ".txt"),
-          fileInput("unnorm_file", "2. Choose unnormalized file", accept = ".txt"),
-          selectInput("protein", "3. Choose the column containing the protein name", choices=c(), multiple=FALSE),
-          fileInput("anno_file", "4. Choose annotation file", accept = ".txt"),
-          selectInput("cols_of_int", "5. Choose the columns to correct for batch-effect", choices=c(), multiple=TRUE),
-          selectInput("exp_grp", "6. Choose the column containing the experimental group", choices=c(), multiple=FALSE),
-          selectInput("sample_names", "7. Choose the column containing the sample names (note that this column should match the headers in normalized data file)", choices=c(), multiple=FALSE),
+          fileInput("norm_file", "1. Choose normalized file (tab delimited .txt) *", accept = ".txt"),
+          fileInput("unnorm_file", "2. Choose unnormalized file (tab delimited .txt)", accept = ".txt"),
+          selectInput("protein", "3. Choose the column containing the protein name *", choices=c(), multiple=FALSE),
+          fileInput("anno_file", "4. Choose annotation file (tab delimited .txt) *", accept = ".txt"),
+          selectInput("cols_of_int", "5. Choose the columns to correct for batch-effect *", choices=c(), multiple=TRUE),
+          selectInput("exp_grp", "6. Choose the column containing the experimental group *", choices=c(), multiple=FALSE),
+          selectInput("sample_names", "7. Choose the column containing the sample names (note that this column should match the headers in normalized data file) *", choices=c(), multiple=FALSE),
           actionButton("nextId", "Next", class = "btn-warning"),
         width = 3),
         mainPanel(
           h3("Input parameters"),
-          p("On uploading your files, a preview will be available for review. The normalized and unnormalized file must contain a column with protein names and the remaining columns should be intensities corresponding to samples as listed in the annotation file. The anotation file should contain columns to correct for batch-effect, a biological experimental group in which you want to retain variation, and a column with sample names that match the normalized/unnormalized file. Each of these columns can be specified in the menu on the left panel after uploading the data files."),
+          p("On uploading your files, a preview will be available for review.", tags$b("The normalized and unnormalized file must contain a column with protein names and the remaining columns should be intensities corresponding to samples"), "as listed in the annotation file.", tags$b("The anotation file should contain columns to correct for batch-effect, a biological experimental group in which you want to retain variation, and a column with sample names that match the normalized/unnormalized file."), "Each of these columns can be specified in the menu on the left panel after uploading the data files."),
+          linebreaks(1),
+          p(tags$i("Watch out for errors on upload that will be displayed in place of the file preview.")),
+          linebreaks(1),
           
           h5(strong("Normalized file preview:")),
           dataTableOutput("norm_table"),
@@ -1057,7 +1061,8 @@ server <- function(input, output, session) {
     # validate issues in file
     validate(
       need(ncol_check == (ncol_norm-1),
-           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!")
+           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!"),
+      shinyFeedback::feedbackDanger("norm_file", ncol_check != (ncol_norm-1), "")
     )
     
     # If everything passes, print file
@@ -1069,6 +1074,14 @@ server <- function(input, output, session) {
     return(file$datapath)
   })
   
+  ############### Process norm file
+  sample_matrix_init <- reactive({
+    req(input$norm_file)
+    norm_dataframe <- input$norm_file
+    norm_dataframe <- read.delim(norm_dataframe$datapath, header = TRUE)
+    return(norm_dataframe)
+  })
+  
   ########### Check unnorm file and display it
   output$unnorm_table <- renderDataTable({
     # validate issues in file
@@ -1077,7 +1090,7 @@ server <- function(input, output, session) {
            "Please upload unnormalized data file")
     )
     
-    # read file once provided
+    # using norm file again
     file_unnorm <- input$unnorm_file
     data_unnorm <- read.delim(file_unnorm$datapath, header = TRUE)
     check_unnorm <- select_if(data_unnorm, is.numeric)
@@ -1086,8 +1099,7 @@ server <- function(input, output, session) {
     nrow_unnorm <- nrow(data_unnorm)
     
     # read norm file again to make sure ncol, nrow in norm and unnorm are same
-    file_norm <- input$norm_file
-    data_norm <- read.delim(file_norm$datapath, header = TRUE)
+    data_norm <- sample_matrix_init()
     check_norm <- select_if(data_norm, is.numeric)
     ncol_norm <- ncol(data_norm)
     ncol_check_norm <- ncol(check_norm)
@@ -1096,11 +1108,11 @@ server <- function(input, output, session) {
     # validate issues in file
     validate(
         need(ncol_check_unnorm == (ncol_unnorm-1),
-            "Please upload unnormalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!") #%then%
-        #need(ncol_unnorm == ncol_norm,
-        #    "Make sure number of columns/samples are same in unnormalized and normalized files, kindly re-load the data accordingly.") %then%
-        #need(nrow_unnorm == nrow_norm,
-        #     "Make sure number of rows/proteins are same in unnormalized and normalized files, kindly re-load the data accordingly.")
+            "Please upload unnormalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!") %then%
+        need(ncol_unnorm == ncol_norm,
+            "Make sure number of columns/samples are same in unnormalized and normalized files, kindly re-load the data accordingly.") %then%
+        need(nrow_unnorm == nrow_norm,
+             "Make sure number of rows/proteins are same in unnormalized and normalized files, kindly re-load the data accordingly.")
     )
     
     # If everything passes, print file
@@ -1110,14 +1122,6 @@ server <- function(input, output, session) {
   unnorm_file_name <- reactive({ 
     file <- input$unnorm_file
     return(file$datapath)
-  })
-  
-  ############### Process norm file
-  sample_matrix_init <- reactive({
-    req(input$norm_file)
-    norm_dataframe <- input$norm_file
-    norm_dataframe <- read.delim(norm_dataframe$datapath, header = TRUE)
-    return(norm_dataframe)
   })
   
   ############# Process unnorm file
@@ -1130,20 +1134,28 @@ server <- function(input, output, session) {
   
   ########### Display anno file
   output$anno_table <- renderDataTable({
-    req(input$anno_file)
-    file <- input$anno_file
+    validate(
+      need(!is.null(input$anno_file),
+           "Please upload annotation file")
+    )
     
-    if (is.null(file)){
-      returnValue(data.frame(Description="Please upload annotation file"))
-    } else {
-      data<-read.delim(file$datapath, header = TRUE)
-      #if(c("attribute_ExperimentalGroup", "Level3", "order") %in% names(data)) {
-      return(datatable(data, options = list(pageLength = 10)))
-      #} else{
-        #shinyalert("Column Error","Please upload annotation file that contains columns/column names with attribute_ExperimentalGroup, Level3, and order.",type="error")
-        #returnValue(data.frame(Error="Please fix column error and reload the file"))
-      #}
-    }
+    # read norm file again to make sure ncol, nrow in norm and unnorm are same
+    data_norm <- sample_matrix_init()
+    ncol_norm <- ncol(data_norm)
+    
+    # read anno file
+    file_anno <- input$anno_file
+    data_anno <- read.delim(file_anno$datapath, header = TRUE)
+    nrow_anno <- nrow(data_anno)
+    
+    # validate issues in file
+    validate(
+      need((ncol_norm-1) == nrow_anno,
+           "Please ensure that the number of samples are same in annotation (rows) and normalized/unnormalized protein intensities file (columns)! Re-load your files as necessary.")
+    )
+    
+    # If everything passes, print file
+    return(datatable(data_anno, options = list(pageLength = 10)))
   })
   
   anno_file_name <- reactive({ 
