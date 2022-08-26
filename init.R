@@ -1,4 +1,6 @@
 ## Install R packages
+install.packages('shinyFeedback', dependencies = TRUE, repos='http://cran.rstudio.com/')
+
 #install.packages('textreadr', dependencies = TRUE, repos='http://cran.rstudio.com/')
 #install.packages('pdftools', dependencies = TRUE, repos='http://cran.rstudio.com/')
 
@@ -33,7 +35,6 @@
 #install.packages(packageurl, repos=NULL, type="source")
 
 #packages <- c("shiny", "shinyjs","shinyalert", "shinyvalidate", "shinythemes", "shinycssloaders", "DT", "tidyr", "textreadr", "optparse", "dplyr", "tibble", "ggplot2", "assertthat", "readr", "purrr", "tidyverse", "ggpubr", "RColorBrewer", "gtable", "grid", "gridExtra", "sqldf", "tools", "missRanger", "plotly","rsconnect")
-packages <- c("shinyFeedback")
 install_if_missing <- function(p) {
     if (!p %in% rownames(installed.packages())) {
         install.packages(p)
