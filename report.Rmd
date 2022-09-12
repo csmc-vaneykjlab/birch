@@ -1,0 +1,188 @@
+---
+title: "BIRCH Report"
+author: "ACBRI Bioinformatics Team"
+date: 'Report generated on `r format(Sys.time(), "%B %d, %Y")`'
+
+output:
+  html_document:
+    anchor_sections: false
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+    fig_width: 11
+    fig_height: 7
+    code_folding: "hide"
+    theme: united
+toc-title: "Table of Contents"
+
+params:
+  input_plot1_reac : input_plot1_reac
+  pareto_plot_reac : pareto_plot_reac
+  missing_plots2_reac : missing_plots2_reac
+  missing_plot3_reac : missing_plot3_reac
+  init_table_reac : init_table_reac
+  filt_plot1_reac : filt_plot1_reac
+  filt_plot2_reac : filt_plot2_reac
+  filt_plot3_reac : filt_plot3_reac
+  filtered_plot1_reac : filtered_plot1_reac
+  filtered_plot2_reac : filtered_plot2_reac
+  filtered_plots3_reac : filtered_plots3_reac
+  filtered_plot4_reac : filtered_plot4_reac
+  unnorm_box_reac : unnorm_box_reac
+  norm_box_reac : norm_box_reac
+  pvca_before_bc_reac : pvca_before_bc_reac
+  pvca_after_across_bc_reac : pvca_after_across_bc_reac
+  pvca_after_bc_reac : pvca_after_bc_reac
+  pca_before_bc_reac : pca_before_bc_reac
+  pca_after_across_bc_reac : pca_after_across_bc_reac
+  pca_after_bc_reac : pca_after_bc_reac
+  hca_before_bc_reac : hca_before_bc_reac
+  hca_after_across_bc_reac : hca_after_across_bc_reac
+  hca_after_bc_reac : hca_after_bc_reac
+  irt_before_bc_reac : irt_before_bc_reac
+  irt_after_across_bc_reac : irt_after_across_bc_reac
+  irt_after_bc_reac : irt_after_bc_reac
+  corr_before_bc_reac : corr_before_bc_reac
+  corr_after_across_bc_reac : corr_after_across_bc_reac
+  corr_after_bc_reac : corr_after_bc_reac
+---
+
+```{js Move the top-right CODE button, echo=FALSE}
+// https://stackoverflow.com/questions/43009788/insert-a-logo-in-upper-right-corner-of-r-markdown-html-document
+$(document).ready(function() {
+  $('#header').css('margin-right', '180px')
+});
+```
+
+```{r}
+if (identical(rmarkdown::metadata$runtime, "shiny"))
+  shiny::setProgress(0.25)  # set progress to 50%
+```
+
+## Initial analysis {.tabset}
+### Sample distribution
+```{r, include = TRUE}
+grid.draw(params$input_plot1_reac)
+```
+
+### Missingness distribution
+```{r}
+params$pareto_plot_reac
+
+params$missing_plots2_reac[1]
+params$missing_plots2_reac[2]
+
+params$missing_plot3_reac
+```
+
+### Take aways
+```{r}
+knitr::kable(params$init_table_reac)
+```
+
+## Filtering {.tabset}
+### Fragments per Sample
+```{r}
+params$filt_plot1_reac
+```
+
+### Fragments per group
+```{r}
+params$filt_plot2_reac
+```
+
+### Fragments per batch
+```{r}
+params$filt_plot3_reac
+```
+
+## Filtered results {.tabset}
+### Sample distribution after filtering
+```{r, include = TRUE}
+grid.draw(params$filtered_plot1_reac)
+```
+
+### Missingness after filtering
+```{r}
+params$filtered_plot2_reac
+params$filtered_plots3_reac
+params$filtered_plot4_reac
+```
+
+### Normalization
+```{r}
+params$unnorm_box_reac
+params$norm_box_reac
+
+if (identical(rmarkdown::metadata$runtime, "shiny"))
+  shiny::setProgress(0.5)  # set progress to 100%
+```
+
+## Batch corrected results 
+## PVCA {.tabset}
+### Before batch correction
+```{r}
+params$pvca_before_bc_reac
+```
+
+### After combat only correction
+```{r}
+params$pvca_after_across_bc_reac
+```
+
+### After combat+loess correction
+```{r}
+params$pvca_after_bc_reac
+```
+
+## PCA {.tabset}
+### Before batch correction
+```{r, include = TRUE}
+grid.draw(params$pca_before_bc_reac)
+```
+
+### After combat only correction
+```{r, include = TRUE}
+grid.draw(params$pca_after_across_bc_reac)
+```
+
+### After combat+loess correction
+```{r, include = TRUE}
+grid.draw(params$pca_after_bc_reac)
+```
+
+## iRT mapping {.tabset}
+### Before batch correction
+```{r}
+params$irt_before_bc_reac
+```
+
+### After combat only correction
+```{r}
+params$irt_after_across_bc_reac
+```
+
+### After combat+loess correction
+```{r}
+params$irt_after_bc_reac
+```
+
+## Correlation {.tabset}
+### Before batch correction
+```{r}
+params$corr_before_bc_reac
+```
+
+### After combat only correction
+```{r}
+params$corr_after_across_bc_reac
+```
+
+### After combat+loess correction
+```{r}
+params$corr_after_bc_reac
+
+if (identical(rmarkdown::metadata$runtime, "shiny"))
+  shiny::setProgress(1)  # set progress to 100%
+```
