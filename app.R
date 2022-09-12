@@ -44,14 +44,6 @@ colClean <- function(x){
   colnames(x) <- gsub("-", "_", colnames(x))
   colnames(x) <- gsub("\\.", "_", colnames(x))
   return(x)  
-} 
-
-#Concatenate protein, peptide and fragment into a single column called "Protein" in input file
-protein_concat <- function(df){
-  df$Protein <- paste(df$ProteinName, df$PeptideSequence, df$FragmentIon, sep="-")
-  df = df[ , !(names(df) %in% c('ProteinName','PeptideSequence','FragmentIon','RT'))]
-  df <- df %>% dplyr::select(Protein, everything()) #makes the protein column the first column
-  return(df)
 }
 
 # Replace hyphens in Level3 of annotation with underscore
@@ -74,21 +66,16 @@ rename_level3 <- function(anno_dataframe, sample_names){
 # Create color_list 
 create_color_list <- function(annotation, cols_of_int, exp_grp, sample_names) {
   check_cols_of_interest <- unlist(strsplit(cols_of_int, " "))
-  anno_cols <- c(exp_grp, sample_names, "order")
-  #df_cols <- c("ProteinName", "PeptideSequence", "FragmentIon")
-  df_cols <- c("Protein")
   
   suppressMessages({
     technical_factors <- check_cols_of_interest
-    #biological_factors <- c('attribute_ExperimentalGroup')
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    plot_for_pca <- c(technical_factors,biological_factors)
-    #plot_for_pca <- c(technical_factors,biological_factors,'order')
+    selected_annotations <- c(biological_factors,technical_factors)
+    plot_for_pca <- c(biological_factors,technical_factors)
     
     color_list <- sample_annotation_to_colors(
       annotation,
-      factor_columns = c(technical_factors,biological_factors),
+      factor_columns = c(biological_factors,technical_factors),
       numeric_columns = c('order')
     )
   })
@@ -141,12 +128,33 @@ call_missing_vals <- function(sample_matrix, annotation_data, group_by, protein)
   return(overlaps)
 }
 
+# Balloon plot showing a grid of exp grp X batch col  
+plot_balloon <- function(annotation_data, batch_col, exp_grp) {
+  anno_for_plot <- annotation_data %>%  dplyr::count(across(exp_grp), across(batch_col))
+  
+  p <- ggplot(anno_for_plot, aes(x=anno_for_plot[[exp_grp]], y=anno_for_plot[[batch_col]])) +
+    geom_point(aes(size = n), shape = 21, colour = "black", fill = "cornsilk") +
+    scale_size_area(max_size = 15, guide = "none") +
+    geom_text(aes(
+      y = as.numeric(as.factor(anno_for_plot[[batch_col]])) - sqrt(n)/34, label = n),
+      vjust = 2.0,
+      colour = "black",
+      size = 3
+    ) +
+    ggtitle(paste0("Experimental group X ", batch_col)) +
+    xlab(toString(exp_grp)) +
+    ylab(toString(batch_col)) +
+    theme(plot.title = element_text(size = 15, hjust = 0.5)) +
+    theme(plot.margin = margin(1,1,1.5,1, "cm"))
+  return(p)
+}
+
 # function to make pareto plot
-plot_pareto <- function(overlaps) {
+plot_pareto <- function(overlaps, protein) {
   # Get percent missingness per fragment
   missval <- overlaps %>%
     mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
-    dplyr::group_by(Protein) %>%
+    dplyr::group_by(across(protein)) %>%
     dplyr::summarize(count = n()-sum(Intensity), percent = (1-(sum(Intensity)/n()))*100)
   
   # Bin missingness and get frequency and cumulative frequency
@@ -169,7 +177,7 @@ plot_pareto <- function(overlaps) {
 }
 
 # function to make heatmap showing missing data
-plot_missval <- function(overlaps, FONTSIZE_sample_axis, color_list, batch_col) {
+plot_missval <- function(overlaps, FONTSIZE_sample_axis, color_list, batch_col, protein) {
   require(tidyverse)
   require(ComplexHeatmap)
   require(RColorBrewer) 
@@ -192,14 +200,14 @@ plot_missval <- function(overlaps, FONTSIZE_sample_axis, color_list, batch_col) 
     dplyr::pull(Group)
   
   missval <- overlaps %>%
-    group_by(Protein) %>%
+    dplyr::group_by(across(all_of(protein))) %>%
     mutate(Intensity = ifelse(Intensity > 0, TRUE, FALSE)) %>% 
     dplyr::filter(any(Intensity == F)) %>%
     dplyr::arrange(Group) %>%
     dplyr::select(-Group) %>%
     dplyr::mutate(Intensity = if_else(Intensity, 1, 0)) %>%
     pivot_wider(names_from = SampleName, values_from = Intensity) %>%
-    column_to_rownames("Protein") %>%
+    column_to_rownames(var=as.character(protein)) %>%
     as.matrix()
   
   # missval[,order(colnames(missval))]
@@ -473,7 +481,7 @@ filter_samples <- function(df, annotation, sample_missingness, expgroup_missingn
   
   rownames(missval) <- missval$Protein
   frags_to_keep_c = row.names(missval)[which(missval$check!=0)]
-  fil_df = fil_df[(fil_df$Protein %in% frags_to_keep_c),]
+  fil_df = fil_df[(fil_df[[protein]] %in% frags_to_keep_c),]
   
   ##### LOGGING ######
   
@@ -489,10 +497,10 @@ filter_samples <- function(df, annotation, sample_missingness, expgroup_missingn
   print("\n")
   
   ####### C #######
-  overlaps <- call_missing_vals(fil_df, annotation, batch_type, "Protein")
+  overlaps <- call_missing_vals(fil_df, annotation, batch_type, protein)
   
   #rename protein column to "Protein"
-  #names(overlaps)[names(overlaps) == protein] <- "Protein"
+  names(overlaps)[names(overlaps) == protein] <- "Protein"
   
   annot_group <- overlaps %>% 
     dplyr::distinct(SampleName, Group) %>%
@@ -759,7 +767,7 @@ ui <- tagList(
     shinyjs::useShinyjs(),
     tags$style(HTML("
       .shiny-output-error-validation {
-        color: orange;
+        color: red;
       }
     ")),
     tags$script(
@@ -794,31 +802,46 @@ ui <- tagList(
     navbarPage(title="",
       id="maintab",
       tabPanel(
+        "Home",
+        span(h3("Welcome!"), style="color:red"),
+        p("BIRCH (Batch-effect Identification, Rectification, and Conclusive-anlaysis on Heterogenous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors."),
+        linebreaks(1),
+        p("Each tab in the top panel represents the steps that lead to a batch-corrected dataset that you uploaded. More detailed instructions are present within each tab and below is a brief representation of the workflow and steps involved."),
+        linebreaks(1),
+        img(src = "workflow.PNG", height = 300, width = 400),
+        linebreaks(1),
+        p("GitHub:", tags$a(href="https://github.com/csmc-vaneykjlab/BatchCorrectionTool", "https://github.com/csmc-vaneykjlab/BatchCorrectionTool")),
+        p("Cite us: ")
+      ),
+      tabPanel(
         "Settings",
         sidebarPanel(
-          fileInput("norm_file", "1. Choose normalized file (tab delimited .txt) *", accept = ".txt"),
-          fileInput("unnorm_file", "2. Choose unnormalized file (tab delimited .txt)", accept = ".txt"),
-          selectInput("protein", "3. Choose the column containing the protein name *", choices=c(), multiple=FALSE),
+          fileInput("unnorm_file", "1. Choose unnormalized file (tab delimited .txt) *", accept = ".txt"),
+          span(uiOutput("unnorm_check"), style="color:red"),
+          fileInput("norm_file", "2. Choose normalized file (tab delimited .txt)", accept = ".txt"),
+          span(uiOutput("norm_check"), style="color:red"),
+          selectInput("protein", "3. Choose the column containing the protein name *", choices=c(), multiple=FALSE, selected=NULL),
           fileInput("anno_file", "4. Choose annotation file (tab delimited .txt) *", accept = ".txt"),
-          selectInput("cols_of_int", "5. Choose the columns to correct for batch-effect *", choices=c(), multiple=TRUE),
-          selectInput("exp_grp", "6. Choose the column containing the experimental group *", choices=c(), multiple=FALSE),
-          selectInput("sample_names", "7. Choose the column containing the sample names (note that this column should match the headers in normalized data file) *", choices=c(), multiple=FALSE),
+          span(uiOutput("anno_check"), style="color:red"),
+          selectInput("cols_of_int", "5. Choose the columns to correct for batch-effect *", choices=c(), multiple=TRUE, selected=NULL),
+          selectInput("exp_grp", "6. Choose the column containing the experimental group *", choices=c(), multiple=FALSE, selected=NULL),
+          span(uiOutput("exp_grp_check"), style="color:red"),
+          selectInput("sample_names", "7. Choose the column containing the sample names (note that this column should match the headers in normalized data file) *", choices=c(), multiple=FALSE, selected=NULL),
+          span(uiOutput("sample_names_check"), style="color:red"),
           actionButton("nextId", "Next", class = "btn-warning"),
         width = 3),
         mainPanel(
           h3("Input parameters"),
           p("On uploading your files, a preview will be available for review.", tags$b("The normalized and unnormalized file must contain a column with protein names and the remaining columns should be intensities corresponding to samples"), "as listed in the annotation file.", tags$b("The anotation file should contain columns to correct for batch-effect, a biological experimental group in which you want to retain variation, and a column with sample names that match the normalized/unnormalized file."), "Each of these columns can be specified in the menu on the left panel after uploading the data files."),
           linebreaks(1),
-          p(tags$i("Watch out for errors on upload that will be displayed in place of the file preview.")),
-          linebreaks(1),
-          
-          h5(strong("Normalized file preview:")),
-          dataTableOutput("norm_table"),
-          linebreaks(2),
-          hr(style = "border-top: 1px solid #000000;"),
           
           h5(strong("Unnormalized file preview:")),
           dataTableOutput("unnorm_table"),
+          linebreaks(2),
+          hr(style = "border-top: 1px solid #000000;"),
+          
+          h5(strong("Normalized file preview:")),
+          dataTableOutput("norm_table"),
           linebreaks(2),
           hr(style = "border-top: 1px solid #000000;"),
           
@@ -832,6 +855,10 @@ ui <- tagList(
           tabPanel("Sample distribution", 
                     h5(strong("Plot showing distribution of samples across batches")),
                     plotOutput("initial_plot1", width = "100%")  %>% withSpinner(color="#0dc5c1")), 
+          
+          tabPanel("Sample matrix",
+                   h5(strong("Balloon plots showing how samples in experimental groups are distributed among the different batches")),
+                   uiOutput("balloon_plots")  %>% withSpinner(color="#0dc5c1")),
           
           tabPanel("Missingness", 
                     h5(strong("Plot showing missingness distribution in overall data")),
@@ -868,7 +895,7 @@ ui <- tagList(
         ),
       ),
       tabPanel(
-        "Diagnosis",
+        "Diagnosis+Filtering",
         sidebarPanel(
           radioButtons("impute_method", "Choose the method to be used for imputation", methods),
           textInput("output_prefix", label = "Pick a prefix for output files", value = "test"),
@@ -967,13 +994,13 @@ ui <- tagList(
                       tabPanel("After combat and loess correction", plotOutput("pca_after_bc") %>% withSpinner(color="#0dc5c1"))
                    )
                   ),
-          tabPanel("HCA",
-                   tabsetPanel(
-                     tabPanel("Before correction", plotlyOutput("hca_before_bc") %>% withSpinner(color="#0dc5c1")), 
-                     tabPanel("After combat only correction", plotlyOutput("hca_after_across_bc") %>% withSpinner(color="#0dc5c1")), 
-                     tabPanel("After combat and loess correction", plotlyOutput("hca_after_bc") %>% withSpinner(color="#0dc5c1"))
-                   )
-                  ),
+          #tabPanel("HCA",
+          #         tabsetPanel(
+          #           tabPanel("Before correction", plotlyOutput("hca_before_bc") %>% withSpinner(color="#0dc5c1")), 
+          #           tabPanel("After combat only correction", plotlyOutput("hca_after_across_bc") %>% withSpinner(color="#0dc5c1")), 
+          #           tabPanel("After combat and loess correction", plotlyOutput("hca_after_bc") %>% withSpinner(color="#0dc5c1"))
+          #         )
+          #        ),
           tabPanel("iRT mapping",
                    tabsetPanel(id="iRT mapping",
                      tabPanel("Before correction", plotOutput("irt_before_bc") %>% withSpinner(color="#0dc5c1")), 
@@ -1026,59 +1053,38 @@ ui <- tagList(
 
 ################### server
 server <- function(input, output, session) {
-  # To validate errors
+  # increase file upload size limit to 60 MB
+  options(shiny.maxRequestSize=90*1024^2)
+  
+  # To validate input
   iv <- InputValidator$new()
+  #iv$add_rule("norm_file", sv_required(""))
+  #iv$add_rule("unnorm_file", sv_required(""))
+  #iv$add_rule("anno_file", sv_required(""))
+  #iv$add_rule("protein", sv_required(""))
+  #iv$add_rule("cols_of_int", sv_required(""))
+  #iv$add_rule("exp_grp", sv_required(""))
+  #iv$add_rule("sample_names", sv_required(""))
   iv$add_rule("irt_prot", sv_optional())
   iv$add_rule("samps_for_corr", sv_optional())
   iv$add_rule(
     "output_prefix",
     sv_regex("^[a-zA-Z0-9]*$", "Only alphanumeric characters allowed")
   )
+  
+  #observeEvent(input$norm_file, {
+  #  file <- input$norm_file
+  #  path <- file$datapath
+  #  iv$add_rule("norm_file", check_norm_file(path))
+  #})
+  
   # `enable()` the validation rules and 
   iv$enable()
   
   # disable tabs
   shinyjs::disable(selector = '.navbar-nav a[data-value="Initial analysis"')
-  shinyjs::disable(selector = '.navbar-nav a[data-value="Diagnosis"')
+  shinyjs::disable(selector = '.navbar-nav a[data-value="Diagnosis+Filtering"')
   shinyjs::disable(selector = '.navbar-nav a[data-value="Results"')
-  
-  ########### Check norm file and display it
-  output$norm_table <- renderDataTable({
-    # validate issues in file
-    validate(
-      need(!is.null(input$norm_file),
-           "Please upload normalized data file")
-    )
-    
-    # read file once provided
-    file <- input$norm_file
-    data <- read.delim(file$datapath, header = TRUE)
-    check <- select_if(data, is.numeric)
-    ncol_norm <- ncol(data)
-    ncol_check <- ncol(check)
-    
-    # validate issues in file
-    validate(
-      need(ncol_check == (ncol_norm-1),
-           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!")
-    )
-    
-    # If everything passes, print file
-    return(datatable(data, options = list(pageLength = 10)))
-  })
-  
-  norm_file_name <- reactive({ 
-    file <- input$norm_file
-    return(file$datapath)
-  })
-  
-  ############### Process norm file
-  sample_matrix_init <- reactive({
-    req(input$norm_file)
-    norm_dataframe <- input$norm_file
-    norm_dataframe <- read.delim(norm_dataframe$datapath, header = TRUE)
-    return(norm_dataframe)
-  })
   
   ########### Check unnorm file and display it
   output$unnorm_table <- renderDataTable({
@@ -1088,33 +1094,39 @@ server <- function(input, output, session) {
            "Please upload unnormalized data file")
     )
     
-    # using norm file again
-    file_unnorm <- input$unnorm_file
-    data_unnorm <- read.delim(file_unnorm$datapath, header = TRUE)
-    check_unnorm <- select_if(data_unnorm, is.numeric)
+    # read file once provided
+    file <- input$unnorm_file
+    data_unnorm <- read.delim(file$datapath, header = TRUE)
+    check <- select_if(data_unnorm, is.numeric)
     ncol_unnorm <- ncol(data_unnorm)
-    ncol_check_unnorm <- ncol(check_unnorm)
-    nrow_unnorm <- nrow(data_unnorm)
-    
-    # read norm file again to make sure ncol, nrow in norm and unnorm are same
-    data_norm <- sample_matrix_init()
-    check_norm <- select_if(data_norm, is.numeric)
-    ncol_norm <- ncol(data_norm)
-    ncol_check_norm <- ncol(check_norm)
-    nrow_norm <- nrow(data_norm)
+    ncol_check <- ncol(check)
     
     # validate issues in file
+    # make sure only one text column exists
     validate(
-        need(ncol_check_unnorm == (ncol_unnorm-1),
-            "Please upload unnormalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!") %then%
-        need(ncol_unnorm == ncol_norm,
-            "Make sure number of columns/samples are same in unnormalized and normalized files, kindly re-load the data accordingly.") %then%
-        need(nrow_unnorm == nrow_norm,
-             "Make sure number of rows/proteins are same in unnormalized and normalized files, kindly re-load the data accordingly.")
+      need(ncol_check == (ncol_unnorm-1),
+           "Please upload unnormalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!")
     )
     
     # If everything passes, print file
     return(datatable(data_unnorm, options = list(pageLength = 10)))
+  })
+  
+  output$unnorm_check <- renderUI({
+    req(input$unnorm_file)
+    
+    # read file once provided
+    file <- input$unnorm_file
+    data_unnorm <- read.delim(file$datapath, header = TRUE)
+    check <- select_if(data_unnorm, is.numeric)
+    ncol_unnorm <- ncol(data_unnorm)
+    ncol_check <- ncol(check)
+    
+    if(ncol_check != (ncol_unnorm-1)) {
+      return(p("Please upload unnormalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!"))
+    } else {
+      return("")
+    }
   })
   
   unnorm_file_name <- reactive({ 
@@ -1130,6 +1142,86 @@ server <- function(input, output, session) {
     return(unnorm_dataframe)
   })
   
+  ########### Check norm file and display it
+  output$norm_table <- renderDataTable({
+    
+    # validate issues in file
+    validate(
+      need(!is.null(input$norm_file),
+           "Please upload normalized data file. This is an optional argument. If you do not have a normalized file, quantile normalization will be performed and the normalized data will be used for further analysis. You can download the normalized file from the Results section.")
+    )
+    
+    # using norm file again
+    file_norm <- input$norm_file
+    data_norm <- read.delim(file_norm$datapath, header = TRUE)
+    check_norm <- select_if(data_norm, is.numeric)
+    ncol_norm <- ncol(data_norm)
+    ncol_check_norm <- ncol(check_norm)
+    nrow_norm <- nrow(data_norm)
+    
+    # read norm file again to make sure ncol, nrow in norm and unnorm are same
+    data_unnorm <- sample_matrix_unnorm_init()
+    check_unnorm <- select_if(data_unnorm, is.numeric)
+    ncol_unnorm <- ncol(data_unnorm)
+    ncol_check_unnorm <- ncol(check_unnorm)
+    nrow_unnorm <- nrow(data_unnorm)
+    
+    # validate issues in file
+    validate(
+      need(ncol_check_norm == (ncol_norm-1),
+           "Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!") %then%
+        need(ncol_norm == ncol_unnorm,
+             "Make sure number of columns/samples are same in unnormalized and normalized files, kindly re-load the data accordingly.") %then%
+        need(nrow_norm == nrow_unnorm,
+             "Make sure number of rows/proteins are same in unnormalized and normalized files, kindly re-load the data accordingly.")
+    )
+    
+    # If everything passes, print file
+    return(datatable(data_norm, options = list(pageLength = 10)))
+  })
+  
+  output$norm_check <- renderUI({
+    req(input$norm_file)
+    
+    # using norm file again
+    file_norm <- input$norm_file
+    data_norm <- read.delim(file_norm$datapath, header = TRUE)
+    check_norm <- select_if(data_norm, is.numeric)
+    ncol_norm <- ncol(data_norm)
+    ncol_check_norm <- ncol(check_norm)
+    nrow_norm <- nrow(data_norm)
+    
+    # read norm file again to make sure ncol, nrow in norm and unnorm are same
+    data_unnorm <- sample_matrix_unnorm_init()
+    check_unnorm <- select_if(data_unnorm, is.numeric)
+    ncol_unnorm <- ncol(data_unnorm)
+    ncol_check_unnorm <- ncol(check_unnorm)
+    nrow_unnorm <- nrow(data_unnorm)
+    
+    if(ncol_check_norm != (ncol_norm-1)) {
+      return(p("Please upload normalized data file with only one protein column (containing text), and the rest as intensities (numeric columns) for each sample!"))
+    } else if (ncol_norm != ncol_unnorm) {
+      return(p("Make sure number of columns and sample names are same in unnormalized and normalized files, kindly re-load the data accordingly."))
+    } else if (nrow_norm != nrow_unnorm) {
+      return(p("Make sure number of rows and protein names are same in unnormalized and normalized files, kindly re-load the data accordingly."))
+    }else {
+      return("")
+    }
+  })
+  
+  norm_file_name <- reactive({ 
+    file <- input$norm_file
+    return(file$datapath)
+  })
+  
+  ############### Process norm file
+  sample_matrix_init <- reactive({
+    req(input$norm_file)
+    norm_dataframe <- input$norm_file
+    norm_dataframe <- read.delim(norm_dataframe$datapath, header = TRUE)
+    return(norm_dataframe)
+  })
+  
   ########### Display anno file
   output$anno_table <- renderDataTable({
     validate(
@@ -1138,8 +1230,8 @@ server <- function(input, output, session) {
     )
     
     # read norm file again to make sure ncol, nrow in norm and unnorm are same
-    data_norm <- sample_matrix_init()
-    ncol_norm <- ncol(data_norm)
+    data_unnorm <- sample_matrix_unnorm_init()
+    ncol_unnorm <- ncol(data_unnorm)
     
     # read anno file
     file_anno <- input$anno_file
@@ -1148,12 +1240,31 @@ server <- function(input, output, session) {
     
     # validate issues in file
     validate(
-      need((ncol_norm-1) == nrow_anno,
+      need((ncol_unnorm-1) == nrow_anno,
            "Please ensure that the number of samples are same in annotation (rows) and normalized/unnormalized protein intensities file (columns)! Re-load your files as necessary.")
     )
     
     # If everything passes, print file
     return(datatable(data_anno, options = list(pageLength = 10)))
+  })
+  
+  output$anno_check <- renderUI({
+    req(input$anno_file)
+    
+    # read norm file again to make sure ncol, nrow in norm and unnorm are same
+    data_unnorm <- sample_matrix_unnorm_init()
+    ncol_unnorm <- ncol(data_unnorm)
+    
+    # read anno file
+    file_anno <- input$anno_file
+    data_anno <- read.delim(file_anno$datapath, header = TRUE)
+    nrow_anno <- nrow(data_anno)
+    
+    if((ncol_unnorm-1) != nrow_anno) {
+      return(p("Please ensure that the number of samples are same in annotation (rows) and normalized/unnormalized protein intensities file (columns)! Re-load your files as necessary."))
+    } else {
+      return("")
+    }
   })
   
   anno_file_name <- reactive({ 
@@ -1185,7 +1296,8 @@ server <- function(input, output, session) {
   observe({
     updateSelectInput(session, "exp_grp",
                       choices = colnames(annotation_data_init()),
-                      selected = colnames(annotation_data_init()[0]))
+                      selected = "")
+                      #selected = colnames(annotation_data_init()[0]))
   })
   
   exp_grp_val <- reactiveVal(NULL)
@@ -1193,11 +1305,26 @@ server <- function(input, output, session) {
     exp_grp_val(input$exp_grp)
   })
   
+  # Print an error in side panel if exp grp is in cols of int
+  output$exp_grp_check <- renderUI({
+    req(input$anno_file, input$exp_grp, input$cols_of_int)
+    
+    exp_grp <- exp_grp_val()
+    col_of_int_vec <- as.vector(rv())
+    
+    if(exp_grp %in% col_of_int_vec) {
+      return(p("Please ensure that the experimental group is not one of the columns to correct on. Either pick another experimental group, or change your columns of interest."))
+    } else {
+      return("")
+    }
+  })
+  
   ########## Process sample_names
   observe({
     updateSelectInput(session, "sample_names",
                       choices = colnames(annotation_data_init()),
-                      selected = colnames(annotation_data_init()[0]))
+                      selected = "")
+                      #selected = colnames(annotation_data_init()[0]))
   })
   
   sample_names_val <- reactiveVal(NULL)
@@ -1208,8 +1335,9 @@ server <- function(input, output, session) {
   ########## Process protein
   observe({
     updateSelectInput(session, "protein",
-                      choices = colnames(sample_matrix_init()),
-                      selected = colnames(sample_matrix_init()[0]))
+                      choices = colnames(sample_matrix_unnorm_init()),
+                      selected = "")
+                      #selected = colnames(sample_matrix_init()[0]))
   })
   
   protein_val <- reactiveVal(NULL)
@@ -1217,35 +1345,116 @@ server <- function(input, output, session) {
     protein_val(input$protein)
   })
   
+  output$sample_names_check <- renderUI({
+    req(input$anno_file, input$unnorm_file, input$protein, input$sample_names)
+    
+    protein <- protein_val()
+    unnorm_col_names <- as.vector(colnames(sample_matrix_unnorm_init()))
+    unnorm_col_names <- unnorm_col_names[! unnorm_col_names %in% c(protein)]
+    
+    anno_data <- annotation_data_init()
+    sample_names <- sample_names_val()
+    
+    sample_names_vec <- as.vector(anno_data[[sample_names]])
+    sample_names_fixed <- c()
+    for (each in sample_names_vec) {
+      first_char <- substr(each, 1, 1)
+      # if first character cannot be converted to integer then is.na will return TRUE and the first character is non-numeric in nature
+      first_char_check <- is.na(as.integer(first_char))
+      if (first_char_check==TRUE) {
+        new_name <- each
+      } else {
+        new_name <- paste0('X', each)
+      }
+      sample_names_fixed <- append(sample_names_fixed, new_name)
+    }
+    
+    if (all(unnorm_col_names==sample_names_fixed)) {
+      return("")
+    } else {
+      return(p("Please ensure that the sample names in unnorm/norm file are same as the sample names in annotation file."))
+    }
+  })
+  
+  # activate the next button once all required input is provided
+  observe({
+    if (is.null(input$unnorm_file) || is.null(input$anno_file) || !isTruthy(input$protein) || !isTruthy(input$exp_grp) || is.null(input$cols_of_int) || !isTruthy(input$sample_names))  {
+      shinyjs::disable("nextId")
+    } else {
+      shinyjs::enable("nextId")
+    }
+  })
+  
   ########### Process files - part 2 - calling functions to clean and check the data
   annotation_data <- reactive({
     req(input$anno_file, input$sample_names)
-    anno_dataframe <- input$anno_file
-    anno_dataframe <- read.delim(anno_dataframe$datapath, header = TRUE)
+    anno_dataframe <- annotation_data_init()
     sample_names <- sample_names_val()
+    
+    # make sure the sample names starting with digits are prefixed with "X"
+    sample_names_vec <- as.vector(anno_dataframe[[sample_names]])
+    sample_names_fixed <- c()
+    for (each in sample_names_vec) {
+      first_char <- substr(each, 1, 1)
+      # if first character cannot be converted to integer then is.na will return TRUE and the first character is non-numeric in nature
+      first_char_check <- is.na(as.integer(first_char))
+      if (first_char_check==TRUE) {
+        new_name <- each
+      } else {
+        new_name <- paste0('X', each)
+      }
+      sample_names_fixed <- append(sample_names_fixed, new_name)
+    }
+    
+    # replace the sample names with the fixed and prefixed sample names
+    anno_dataframe[[sample_names]] <- sample_names_fixed
+    
+    # call methods to clean the anno file
     anno_dataframe <- colClean2(anno_dataframe, sample_names)
     anno_dataframe <- rename_level3(anno_dataframe, sample_names)
-    return(anno_dataframe)
+    
+    # create a column called order if it doesn't exist
+    col_names <- names(anno_dataframe)
+    if ("order" %in% col_names) {
+      return(anno_dataframe) 
+    } else {
+      anno_dataframe$order <- 1:nrow(anno_dataframe)
+      return(anno_dataframe) 
+    }
   })
   
   sample_matrix <- reactive({
-    req(input$norm_file)
-    norm_dataframe <- input$norm_file
-    norm_dataframe <- read.delim(norm_dataframe$datapath, header = TRUE)
-    norm_dataframe <- colClean(norm_dataframe)
-    norm_dataframe = norm_dataframe[ , !(names(norm_dataframe) %in% c('RT'))]
-    #norm_dataframe <- protein_concat(norm_dataframe)
-    return(norm_dataframe)
+    req(input$unnorm_file)
+    if (is.null(input$norm_file)) {
+      norm_dataframe <- sample_matrix_unnorm_init()
+      norm_dataframe <- colClean(norm_dataframe)
+      protein <- protein_val()
+      rownames(norm_dataframe) <- norm_dataframe[[protein]]
+      norm_dataframe <- norm_dataframe[,-which(colnames(norm_dataframe) %in% c(protein))] 
+      # quantile normalization
+      quantile_normalized_matrix <- normalize_data_dm(as.matrix(norm_dataframe), normalize_func = "quantile")
+      mode(quantile_normalized_matrix) = "numeric"
+      #quantile_normalized_matrix <- cbind(rownames(quantile_normalized_matrix), quantile_normalized_matrix) # unset rownames as protein names
+      #colnames(quantile_normalized_matrix)[1] <- protein
+      #rownames(quantile_normalized_matrix)<-NULL
+      quantile_normalized_matrix <- as.data.frame(quantile_normalized_matrix)
+      quantile_normalized_matrix <- tibble::rownames_to_column(quantile_normalized_matrix, protein)
+      return(quantile_normalized_matrix)  
+    } 
+    else {
+      norm_dataframe <- sample_matrix_init()
+      norm_dataframe <- colClean(norm_dataframe)
+      return(norm_dataframe) 
+    }
   })
   
+  # return norm file instead of unnorm if not provided 
   sample_matrix_unnorm <- reactive({
     req(input$unnorm_file)
     unnorm_dataframe <- input$unnorm_file
     unnorm_dataframe <- read.delim(unnorm_dataframe$datapath, header = TRUE)
     unnorm_dataframe <- colClean(unnorm_dataframe)
-    unnorm_dataframe = unnorm_dataframe[ , !(names(unnorm_dataframe) %in% c('RT'))]
-    #unnorm_dataframe <- protein_concat(unnorm_dataframe)
-    return(unnorm_dataframe)
+    return(unnorm_dataframe) 
   })
   
   
@@ -1256,7 +1465,7 @@ server <- function(input, output, session) {
       selected = "Initial analysis"
     )
     shinyjs::enable(selector = '.navbar-nav a[data-value="Initial analysis"')
-    shinyjs::enable(selector = '.navbar-nav a[data-value="Diagnosis"')
+    shinyjs::enable(selector = '.navbar-nav a[data-value="Diagnosis+Filtering"')
   })
   
   ########### Generate initial analysis results
@@ -1267,7 +1476,7 @@ server <- function(input, output, session) {
     color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
     technical_factors <- as.character(rv())
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors,technical_factors)
     print(selected_annotations)
     
     index = 0
@@ -1293,7 +1502,7 @@ server <- function(input, output, session) {
   # For missingness in samples
   # Make table with sample_matrix and annotation combined
   joined_df <- reactive({
-    req(input$norm_file, input$cols_of_int)
+    req(input$unnorm_file, input$cols_of_int)
     table2 <- sample_matrix() %>%
       select(everything()) %>%
       summarise_all(funs(sum(is.na(.)))) %>%
@@ -1309,14 +1518,53 @@ server <- function(input, output, session) {
     return(joined_df)
   })
   
+  # Balloon plot
+  balloon_plots_reac <- reactive({
+    balloon_plot_output_list <- lapply(1:length(as.character(rv())), function(i) {
+      plotname <- paste("balloonplot", i, sep="")
+      plotOutput(plotname, height=500)
+    })
+    
+    # Convert the list to a tagList - this is necessary for the list of items to display properly.
+    do.call(tagList, balloon_plot_output_list)
+  })
+  
+  num_plots <- 5
+  for (i in 1:num_plots) {
+    # Need local so that each item gets its own number. Without it, the value
+    # of i in the renderPlot() will be the same across all instances, because
+    # of when the expression is evaluated.
+    local({
+      my_i <- i
+      plotname <- paste("balloonplot", my_i, sep="")
+      output[[plotname]] <- renderPlot({
+        req(input$cols_of_int)
+        
+        index <- as.list(rv()[my_i])
+        index_char <- toString(index)
+        print(index_char)
+        
+        exp_grp <- exp_grp_val()
+        balloon_plot <- plot_balloon(annotation_data(), index_char, exp_grp)
+        return(balloon_plot)
+      })
+    })
+  }
+  
+  output$balloon_plots <- renderUI({
+    p <- balloon_plots_reac()
+    print(p)
+  })
+  
   # Pareto plot
   pareto_plot_reac <- reactive({
     # hard coding batch to first batch in cols of int 
     index <- as.list(rv()[1])
     index_char <- toString(index)
     protein <- protein_val()
-    overlaps <- call_missing_vals(sample_matrix(), annotation_data(), index_char, protein)
-    plot <- plot_pareto(overlaps)
+    sample_matrix <- sample_matrix()
+    overlaps <- call_missing_vals(sample_matrix, annotation_data(), index_char, protein)
+    plot <- plot_pareto(overlaps, protein)
     return(plot)
   })
   
@@ -1364,7 +1612,7 @@ server <- function(input, output, session) {
         color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
         protein <- protein_val()
         overlaps <- call_missing_vals(sample_matrix(), annotation_data(), index_char, protein)
-        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char)
+        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
         return(miss_plot)
       })
     })
@@ -1390,7 +1638,7 @@ server <- function(input, output, session) {
     color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
     protein <- protein_val()
     overlaps <- call_missing_vals(sample_matrix(), annotation_data(), exp_grp, protein)
-    miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp)
+    miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp, protein)
     
     return(miss_plot2)
   })
@@ -1472,15 +1720,16 @@ server <- function(input, output, session) {
   output$missing_text <- renderText({paste("1) Patterns in missingness distribution can make the data difficult to correct on.", "<br>", "2) Use the missingness plots and table above to ensure that batch correction can be performed accurately on your data.", "<br>", "3) Missingness should ideally be < 50% within each plate, the \"Num_of_plates_passing_missing_cutoff\" column shows how many plates passed this criteria.", "<br>", "4) Variation in missingness is calculated using the formula: (plate with max % of missingness - plate with min % of missingness/plate with max % of missingness).", "<br>", "The variation in missingness column tells you if there are plates with an uneven missingness distribution. This value should ideally be < 50%, which suggests that missingness is random and not particular to any plate!")})
   output$missing_note1 <- renderText({"As a note:"})
   output$missing_note2 <- renderText({paste("Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) is ", sum(joined_df()$value), "and the percent of missing data is ", round((sum(joined_df()$value)/(nrow(sample_matrix())*(ncol(sample_matrix())-1)))*100, 2), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.")})
-  output$take_away_text <- renderText({"If certain samples/batches has more missingness than others, filtering for fragments and samples can be applied in the next step. If you want to proceed with filtering and batch correction using the uploaded data, proceed to the Diagnosis tab."})
+  output$take_away_text <- renderText({"If certain samples/batches has more missingness than others, filtering for fragments and samples can be applied in the next step. If you want to proceed with filtering and batch correction using the uploaded data, proceed to the Diagnosis+Filtering tab."})
   
-  ############### Diagnosis tab
+  ############### Diagnosis+Filtering tab
   ########### Process samps_for_corr
   #combos <- reactive(NULL)
   observe ({
     #req(input$cols_of_int)
     anno_file_temp <- annotation_data()
-    unique_exp_grp <- unique(anno_file_temp$attribute_ExperimentalGroup)
+    exp_grp <- exp_grp_val()
+    unique_exp_grp <- unique(anno_file_temp[[exp_grp]])
     print(unique_exp_grp)
     cols_of_int_temp <- rv()
     print(cols_of_int_temp)
@@ -1526,9 +1775,10 @@ server <- function(input, output, session) {
     req(input$submitId2)
     
     sample_matrix <- sample_matrix()
-    rownames(sample_matrix) <- sample_matrix$Protein 
+    protein <- protein_val()
+    rownames(sample_matrix) <- sample_matrix[[protein]]
     
-    sample_matrix <- sample_matrix[,-which(colnames(sample_matrix) %in% c("Protein", "nPeptide", "nFragment", "RT"))] 
+    sample_matrix <- sample_matrix[,-which(colnames(sample_matrix) %in% c(protein))] 
     sample_norm_long <- matrix_to_long(sample_matrix) 
     sample_norm_long.logged <- log_transform_df(sample_norm_long, log_base = 2, offset = 1)
     
@@ -1781,7 +2031,7 @@ server <- function(input, output, session) {
   # For missingness in samples
   # Make table with sample_matrix and annotation combined
   joined_df2 <- reactive({
-    req(input$norm_file, input$cols_of_int)
+    req(input$unnorm_file, input$cols_of_int)
     table2 <- sample_matrix_filt() %>%
       select(everything()) %>%
       summarise_all(funs(sum(is.na(.)))) %>%
@@ -1808,7 +2058,7 @@ server <- function(input, output, session) {
     color_list <- create_color_list(annotation_data_filt(),  as.character(rv()), exp_grp, sample_names)
     technical_factors <- as.character(rv())
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors, technical_factors)
     print(selected_annotations)
     
     index = 0
@@ -1835,7 +2085,7 @@ server <- function(input, output, session) {
   filtered_plot2_reac <- reactive({
     protein <- protein_val()
     overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), var_to_correct_on_final(), protein)
-    plot <- plot_pareto(overlaps)
+    plot <- plot_pareto(overlaps, protein)
     return(plot)
   })
   
@@ -1883,7 +2133,7 @@ server <- function(input, output, session) {
         color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
         protein <- protein_val()
         overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), index_char, protein)
-        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char)
+        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
         return(miss_plot)
       })
     })
@@ -1909,7 +2159,7 @@ server <- function(input, output, session) {
     color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
     protein <- protein_val()
     overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), exp_grp, protein)
-    miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp)
+    miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp, protein)
     return(miss_plot2)
   })
   
@@ -1920,21 +2170,22 @@ server <- function(input, output, session) {
   
   ######### getting data for visualizing normalization
   combo_output2 <- reactive({
-    sample_matrix <- sample_matrix_filt()
-    rownames(sample_matrix) <- sample_matrix$Protein 
-    sample_matrix <- sample_matrix[,-which(colnames(sample_matrix) %in% c("Protein", "nPeptide", "nFragment", "RT"))] 
-    sample_norm_long <- matrix_to_long(sample_matrix) 
-    sample_norm_long.logged <- log_transform_df(sample_norm_long, log_base = 2, offset = 1)
-    
-    sample_matrix_unnorm <- sample_matrix_unnorm_filt()
-    rownames(sample_matrix_unnorm) <- sample_matrix_unnorm$Protein 
-    sample_matrix_unnorm <- sample_matrix_unnorm[,-which(colnames(sample_matrix_unnorm) %in% c("Protein", "nPeptide", "nFragment", "RT"))] 
-    sample_unnorm_long <- matrix_to_long(sample_matrix_unnorm) 
-    sample_unnorm_long.logged <- log_transform_df(sample_unnorm_long, log_base = 2, offset = 1)
-    
-    combo <- list(sample_norm_long.logged = sample_norm_long.logged, sample_unnorm_long.logged = sample_unnorm_long.logged)
-    
-    return(combo)
+      sample_matrix <- sample_matrix_filt()
+      protein <- protein_val()
+      rownames(sample_matrix) <- sample_matrix[[protein]] 
+      sample_matrix <- sample_matrix[,-which(colnames(sample_matrix) %in% c(protein))] 
+      sample_norm_long <- matrix_to_long(sample_matrix) 
+      sample_norm_long.logged <- log_transform_df(sample_norm_long, log_base = 2, offset = 1)
+      
+      sample_matrix_unnorm <- sample_matrix_unnorm_filt()
+      rownames(sample_matrix_unnorm) <- sample_matrix_unnorm[[protein]]
+      sample_matrix_unnorm <- sample_matrix_unnorm[,-which(colnames(sample_matrix_unnorm) %in% c(protein))] 
+      sample_unnorm_long <- matrix_to_long(sample_matrix_unnorm) 
+      sample_unnorm_long.logged <- log_transform_df(sample_unnorm_long, log_base = 2, offset = 1)
+      
+      combo <- list(sample_norm_long.logged = sample_norm_long.logged, sample_unnorm_long.logged = sample_unnorm_long.logged)
+      
+      return(combo) 
   })
   
   sample_norm_long.logged <- reactive({
@@ -2081,7 +2332,7 @@ server <- function(input, output, session) {
     technical_factors <- check_cols_of_interest
     exp_grp <- exp_grp_val()
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors, technical_factors)
     df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     
     sample_names <- sample_names_val()
@@ -2101,8 +2352,8 @@ server <- function(input, output, session) {
     check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
     technical_factors <- check_cols_of_interest
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    plot_for_pca <- c(technical_factors,biological_factors,'order')
+    selected_annotations <- c(biological_factors, technical_factors)
+    plot_for_pca <- c(biological_factors, technical_factors)
   
     pltList <- list()
     for( i in plot_for_pca ){
@@ -2118,17 +2369,19 @@ server <- function(input, output, session) {
   frag_anno_for_iRT <- reactive({
     req(input$continue, input$iRT_prot)
     
+    protein <- protein_val()
+    
     # To make iRT plots, create own iRT mapping file
     sample_matrix <- sample_matrix_filt()
     iRT_prot_val <- input$iRT_prot
       
-    fragment_annotation <- dplyr::filter(sample_matrix, grepl(iRT_prot_val, sample_matrix$Protein))
+    fragment_annotation <- dplyr::filter(sample_matrix, grepl(iRT_prot_val, sample_matrix[[protein]]))
       
-    fragment_annotation <- fragment_annotation["Protein"]
+    fragment_annotation <- fragment_annotation %>% select(protein)
     colnames(fragment_annotation) <- c("peptide_group_label")
       
     fragment_annotation <- fragment_annotation %>%
-      add_column(Protein = iRT_prot_val(),
+      mutate(!! protein := iRT_prot_val(),
                   .before = "peptide_group_label")
       
     return(fragment_annotation) 
@@ -2146,21 +2399,16 @@ server <- function(input, output, session) {
   irt_before_bc_reac <- reactive({
     req(input$continue, input$iRT_prot)
     
-    check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
-    technical_factors <- check_cols_of_interest
+    protein <- protein_val()
     exp_grp <- exp_grp_val()
-    biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
-
     sample_names <- sample_names_val()
     color_list <- create_color_list(annotation_data_filt(),  as.character(rv()), exp_grp, sample_names)
     
-    var_to_correct_on <- var_to_correct_on()
+    var_to_correct_on <- var_to_correct_on_final()
       
     psi_before <- plot_spike_in(sample_long.logged(), annotation_data_filt(),
                                 peptide_annotation = frag_anno_for_iRT(),
-                                protein_col = 'Protein', spike_ins = iRT_prot_val(),
+                                protein_col = protein, spike_ins = iRT_prot_val(),
                                 plot_title = 'Fragments - Before Batch Correction',
                                 color_by_batch = TRUE, batch_col = var_to_correct_on, color_scheme = color_list[[var_to_correct_on]])
     psi_before <- psi_before + theme(legend.position="right")
@@ -2183,7 +2431,7 @@ server <- function(input, output, session) {
     technical_factors <- check_cols_of_interest
     exp_grp <- exp_grp_val()
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors, technical_factors)
     df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     
     sample_names <- sample_names_val()
@@ -2239,11 +2487,11 @@ server <- function(input, output, session) {
     print(p)
   })
   
-  output$hca_before_bc <- renderPlotly({
-    req(input$continue)
-    p <- hca_before_bc_reac()
-    print(p)
-  })
+  #output$hca_before_bc <- renderPlotly({
+  #  req(input$continue)
+  #  p <- hca_before_bc_reac()
+  #  print(p)
+  #})
   
   output$irt_before_bc <- renderPlot({
     req(input$continue)
@@ -2455,8 +2703,8 @@ server <- function(input, output, session) {
     check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
     technical_factors <- check_cols_of_interest
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    plot_for_pca <- c(technical_factors,biological_factors,'order')
+    selected_annotations <- c(biological_factors, technical_factors)
+    plot_for_pca <- c(biological_factors,technical_factors)
     
     pltList <- list()
     for( i in plot_for_pca ){
@@ -2483,8 +2731,8 @@ server <- function(input, output, session) {
     check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
     technical_factors <- check_cols_of_interest
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    plot_for_pca <- c(technical_factors,biological_factors,'order')
+    selected_annotations <- c(biological_factors, technical_factors)
+    plot_for_pca <- c(biological_factors,technical_factors)
     
     pltList <- list()
     for( i in plot_for_pca ){
@@ -2510,7 +2758,7 @@ server <- function(input, output, session) {
     check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
     technical_factors <- check_cols_of_interest
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors,technical_factors)
     df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     
     sample_names <- sample_names_val()
@@ -2520,10 +2768,10 @@ server <- function(input, output, session) {
     return(plot)
   })
   
-  output$hca_after_across_bc <- renderPlotly({
-    p <- hca_after_across_bc_reac()
-    print(p)
-  })
+  #output$hca_after_across_bc <- renderPlotly({
+  #  p <- hca_after_across_bc_reac()
+  #  print(p)
+  #})
   
   hca_after_bc_reac <- reactive({
     req(input$continue)
@@ -2533,7 +2781,7 @@ server <- function(input, output, session) {
     check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
     technical_factors <- check_cols_of_interest
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors,technical_factors)
     df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     
     sample_names <- sample_names_val()
@@ -2543,20 +2791,16 @@ server <- function(input, output, session) {
     return(plot)
   })
   
-  output$hca_after_bc <- renderPlotly({
-    p <- hca_after_bc_reac()
-    print(p)
-  })
+  #output$hca_after_bc <- renderPlotly({
+  #  p <- hca_after_bc_reac()
+  #  print(p)
+  #})
   
   irt_after_across_bc_reac <- reactive({
     req(input$continue, input$iRT_prot)
     
-    check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
-    technical_factors <- check_cols_of_interest
+    protein <- protein_val()
     exp_grp <- exp_grp_val()
-    biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     sample_names <- sample_names_val()
     color_list <- create_color_list(annotation_data_filt(),  as.character(rv()), exp_grp, sample_names)
     
@@ -2564,7 +2808,7 @@ server <- function(input, output, session) {
     
     psi_before <- plot_spike_in(sample_long.logged_bc_across(), annotation_data_filt(),
                                 peptide_annotation = frag_anno_for_iRT(),
-                                protein_col = 'Protein', spike_ins = iRT_prot_val(),
+                                protein_col = protein, spike_ins = iRT_prot_val(),
                                 plot_title = 'Fragments - After Combat Batch Correction',
                                 color_by_batch = TRUE, batch_col = var_to_correct_on, color_scheme = color_list[[var_to_correct_on]])
     psi_before <- psi_before + theme(legend.position="right")
@@ -2579,20 +2823,15 @@ server <- function(input, output, session) {
   irt_after_bc_reac <- reactive({
     req(input$continue, input$iRT_prot)
     
-    check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
-    technical_factors <- check_cols_of_interest
+    protein <- protein_val()
     exp_grp <- exp_grp_val()
-    biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
-    df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     sample_names <- sample_names_val()
     color_list <- create_color_list(annotation_data_filt(),  as.character(rv()), exp_grp, sample_names)
-    
     var_to_correct_on <- var_to_correct_on_final()
     
     psi_before <- plot_spike_in(sample_long.logged_bc(), annotation_data_filt(),
                                 peptide_annotation = frag_anno_for_iRT(),
-                                protein_col = 'Protein', spike_ins = iRT_prot_val(),
+                                protein_col = protein, spike_ins = iRT_prot_val(),
                                 plot_title = 'Fragments - After Batch Correction',
                                 color_by_batch = TRUE, batch_col = var_to_correct_on, color_scheme = color_list[[var_to_correct_on]])
     psi_before <- psi_before + theme(legend.position="right")
@@ -2611,7 +2850,7 @@ server <- function(input, output, session) {
     technical_factors <- check_cols_of_interest
     exp_grp <- exp_grp_val()
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors,technical_factors)
     df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     
     sample_names <- sample_names_val()
@@ -2660,7 +2899,7 @@ server <- function(input, output, session) {
     technical_factors <- check_cols_of_interest    
     exp_grp <- exp_grp_val()
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors,technical_factors)
     df_with_annotations <- hca_anno_df(annotation_data_filt(), selected_annotations)
     
     sample_names <- sample_names_val()
@@ -2717,7 +2956,7 @@ server <- function(input, output, session) {
     technical_factors <- check_cols_of_interest
     exp_grp <- exp_grp_val()
     biological_factors <- c(exp_grp)
-    selected_annotations <- c(technical_factors,biological_factors)
+    selected_annotations <- c(biological_factors,technical_factors,)
     
     pvca_after_across_score <- 0
     for (i in selected_annotations) {
@@ -3003,9 +3242,9 @@ server <- function(input, output, session) {
                          pca_before_bc_reac = pca_before_bc_reac(),
                          pca_after_across_bc_reac = pca_after_across_bc_reac(),
                          pca_after_bc_reac = pca_after_bc_reac(),
-                         hca_before_bc_reac = hca_before_bc_reac(),
-                         hca_after_across_bc_reac = hca_after_across_bc_reac(),
-                         hca_after_bc_reac = hca_after_bc_reac(),
+                         #hca_before_bc_reac = hca_before_bc_reac(),
+                         #hca_after_across_bc_reac = hca_after_across_bc_reac(),
+                         #hca_after_bc_reac = hca_after_bc_reac(),
                          corr_before_bc_reac = corr_before_bc_reac(),
                          corr_after_across_bc_reac = corr_after_across_bc_reac(),
                          corr_after_bc_reac = corr_after_bc_reac())
@@ -3029,10 +3268,10 @@ server <- function(input, output, session) {
                          pvca_after_bc_reac = pvca_after_bc_reac(),
                          pca_before_bc_reac = pca_before_bc_reac(),
                          pca_after_across_bc_reac = pca_after_across_bc_reac(),
-                         pca_after_bc_reac = pca_after_bc_reac(),
-                         hca_before_bc_reac = hca_before_bc_reac(),
-                         hca_after_across_bc_reac = hca_after_across_bc_reac(),
-                         hca_after_bc_reac = hca_after_bc_reac())
+                         pca_after_bc_reac = pca_after_bc_reac())
+                         #hca_before_bc_reac = hca_before_bc_reac(),
+                         #hca_after_across_bc_reac = hca_after_across_bc_reac(),
+                         #hca_after_bc_reac = hca_after_bc_reac()
         }
   
         rmarkdown::render(tempReport, output_file = file,
