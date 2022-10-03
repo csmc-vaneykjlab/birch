@@ -18,7 +18,7 @@
 - Input files with protein intensitites and an annotation file (explained in detail in the next section). 
 
 ## Example usage
-Please refer to our example [example](example/) for a more detailed and hands-on walkthrough on how to use BIRCH.
+Please refer to our [example](example/) for a more detailed and hands-on walkthrough on how to use BIRCH.
 
 ## Using BIRCH
 The general workflow is as follows:
@@ -27,12 +27,15 @@ The general workflow is as follows:
 
 Below we list each tab with a description of it includes. For details on the results generated and to understand how to use the plots/analysis, please refer to the example usage above. 
 
+### Home tab
+When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab just contains details on what BIRCH is and the workflow followed in BIRCH to go from data affected by batch-effect to batch-corrected data.  
+
 ### Settings tab
-When the BIRCH web-app initially loads, the settings tab is displayed at first.
+From the home page, the Settings tab can be selected to start the batch-correction process. 
 
 ![BIRCH settings page](Images/settings.PNG)
 
-This tab is dynamic, and you will be asked to upload files and choose input parameters. The left side panel allows you to make your choices, while the right side main panel will display a pre-view of the files you uploaded.  
+This tab is dynamic, and you will be asked to upload files and choose input parameters. Alternatively, you can choose to "Load example data" to initially try out BIRCH and understand its functionality. The left side panel allows you to make your choices, while the right side main panel will display a pre-view of the files you uploaded. 
 
 In this tab, you will have to upload 3 files:
 1. Normalized data 
@@ -51,20 +54,17 @@ Here are some specifications to make sure the input files abide by the requireme
 3. Columns with sample names in the normalized and unnormalized files should match with the sample names in the annotation files. Number of samples in annotation file and intensity data files should be the same. 
 4. Annotation file should have columns corresponding to the different batches you want to analyze (eg. MS batch, Digestion batch, Differentiation batch, etc.), along with the biological experimental group. 
 
-Once the data is uploaded, a preview of the uploaded data will be visible in the main panel and the next Initial analysis and Diagnosis tabs becomes active. 
+Once the data is uploaded, a preview of the uploaded data will be visible in the main panel. All the input parameters are required except for the normalized file (which is optional). If a normalized file is not provided, quantile normalization will be performed and used for further analysis. Once all the required parameters are provided, the "Next" button becomes active, which takes you to the Initial Analysis tab.  
 
 ### Initial analysis tab
-This is a static tab that displays some plots with initial analysis that are generated using the data uploaded in the settings page. This tab in-turn has 3 sub-parts that are characterized as Sample distribution, Missingness and Take-away.  
+This is a static tab that displays some plots with initial analysis that are generated using the data uploaded in the settings page. This tab in-turn has 4 sub-parts that are characterized as Sample distribution, Sample Matrix, Missingness and Take-away.  
 
 ![BIRCH initial analysis page](Images/initial_analysis.PNG)
 
-The sample distribution section displays a plot with the number of samples in each batch (as chosen in the settings tab). The missingness section displays multiple plots that shows how much of the input data is missing/NA, this will also give you an idea of how much data will be imputed in the next step. Lastly, the take-away section gives breif statistics on sample distribution and missingness, which inturn helps with taking a decision on whether the data is suitable for batch correction. 
+The sample distribution section displays a plot with the number of samples in each batch (as chosen in the settings tab). The sample matrix section shows a balloon plot depicting how samples are distributed amongst the columns of interest and experimental group together. The missingness section displays multiple plots that shows how much of the input data is missing/NA, this will also give you an idea on the quantity data that will be imputed in the next step. Lastly, the take-away section displays breif statistics on sample distribution and missingness, which inturn helps with taking a decision on whether the data is suitable for batch correction. 
 
-### Diagnosis tab
-The Diagnosis tab is the next dynalic tab where user input is required. In this tab, you will first need to provide 3 parameters:
-1. Imputation method - BIRCH provides two options for imputing missing values. Imputation is required for generating a PVCA and other results that are necessary to draw conclusions on batch-correction. The half-minimum method is faster but not very efficient in terms of results, while ranger takes longer and uses random-forests to impute missing values. 
-2. Prefix for output files -  The final results tab has a section to download results from. Using this option, you can provide a prefix for your downloadable files based on your project specifications. 
-3. iRT protein name - This is an optional field where you can provide the name of your iRT protein. This is make additional plots regarding the iRT protein in the results tab. 
+### Diagnosis+Filtering tab
+The Diagnosis tab is the next dynalic tab where user input is required. In this tab, you will first need to provide 1 parameter, i.e., Imputation method (BIRCH provides two options for imputing missing values. Imputation is required for generating a PVCA and other results that are necessary to draw conclusions on batch-correction. The half-minimum method is faster but not very efficient in terms of results, while ranger takes longer and uses random-forests to impute missing values).
 
 ![BIRCH diagnosis 1](Images/diagnosis_1.PNG)
 
@@ -74,14 +74,18 @@ On hitting the submit button after these options are provided, missing data is i
 
 If your biological group has the most variation to begin with, a note saying batch-correction is not required for your data will be generated. If you still want to batch-correct, select the variable to correct on in the left panel.
 
-Lastly, in addition to the column to correct on, you can choose "experimental group:batch" combination to study correlation in replicates. At this stage you also get 3 options for filtering (scroll bar set to defaults) which include:
-1. Sample threshold - To identify samples with a lot of missingness. Samples that have missingness above the given threshold will be dropped. 
-2. Experimental group threshold - This filter is applied to make sure each experimental/biological group has a certain percentage of intensities that are present. We usually keep a cut-off of 50% for this filter and if any feature/fragment/protein has all experimental groups with over 50% missingness, it will be dropped.
-3. Batch threshold - This is applied to make sure each batch (within variable/column to correct on) has a certain percentage of intensities that are present (non-missing). Features/fragments/proteins having missingness more than the specified threshold will be dropped. 
+Lastly, in addition to the column to correct on, you can choose/input:
+1. Prefix for output files - The final results tab has a section to download results from. Using this option, you can provide a prefix for your downloadable files based on your project specifications. 
+2. iRT protein name (optional) - This is an optional field where you can provide the name of your iRT protein. This is make additional plots regarding the iRT protein in the results tab. 
+3. "Experimental group:batch" combination (optional) - to study correlation in replicates. 
+And 3 filtering options (scroll bar set to defaults) that include:
+4. Sample threshold - To identify samples with a lot of missingness. Samples that have missingness above the given threshold will be dropped. 
+5. Experimental group threshold - This filter is applied to make sure each experimental/biological group has a certain percentage of intensities that are present. We usually keep a cut-off of 50% for this filter and if any feature/fragment/protein has all experimental groups with over 50% missingness, it will be dropped.
+6. Batch threshold - This is applied to make sure each batch (within variable/column to correct on) has a certain percentage of intensities that are present (non-missing). Features/fragments/proteins having missingness more than the specified threshold will be dropped. 
 
-As a note: If all thresholds are set to 1.0 (i.e., you don't want to filter anything), we will carry out minimal filtering by default (at least 2 non-missing intensities per batch). 
+As a note: If all filtering thresholds are set to 1.0 (i.e., you don't want to filter anything), we will carry out minimal filtering by default (at least 2 non-missing intensities per batch). 
 
-On hitting continue, a few plots will be displayed in the main tab that show how the filtering criteria chosen by you will affect the data and what will be filtered out. Simultaneously, the results tab becomes active. 
+On hitting continue, a few plots will be displayed in the main tab that show how the filtering criteria chosen by you will affect the data and what will be filtered out. Simultaneously, the Results tab becomes active and you can click on "Go to Results" button to navigate to the final Results tab. 
 
 ### Results tab
 The results tab is the final tab that is static and is loaded with all the final results, including plots created using filtered data, results comparing nomalized and unnormalized files, and other batch-correction related results. The sub-sections within the results tab are as shown in the below image. 
