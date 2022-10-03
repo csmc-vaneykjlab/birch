@@ -18,7 +18,7 @@
 - Input files with protein intensitites and an annotation file (explained in detail in the next section). 
 
 ## Example usage
-Please refer to our example (XXX link it later) for a more detailed and hands-on walkthrough on how to use BIRCH.
+Please refer to our example [example](example/) for a more detailed and hands-on walkthrough on how to use BIRCH.
 
 ## Using BIRCH
 The general workflow is as follows:
