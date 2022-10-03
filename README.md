@@ -28,7 +28,9 @@ The general workflow is as follows:
 Below we list each tab with a description of it includes. For details on the results generated and to understand how to use the plots/analysis, please refer to the example usage above. 
 
 ### Home tab
-When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab just contains details on what BIRCH is and the workflow followed in BIRCH to go from data affected by batch-effect to batch-corrected data.  
+When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab just contains details on what BIRCH is and the workflow followed in BIRCH to go from data affected by batch-effect to batch-corrected data. 
+
+![BIRCH settings page](Images/home.PNG)
 
 ### Settings tab
 From the home page, the Settings tab can be selected to start the batch-correction process. 
@@ -78,6 +80,7 @@ Lastly, in addition to the column to correct on, you can choose/input:
 1. Prefix for output files - The final results tab has a section to download results from. Using this option, you can provide a prefix for your downloadable files based on your project specifications. 
 2. iRT protein name (optional) - This is an optional field where you can provide the name of your iRT protein. This is make additional plots regarding the iRT protein in the results tab. 
 3. "Experimental group:batch" combination (optional) - to study correlation in replicates. 
+
 And 3 filtering options (scroll bar set to defaults) that include:
 4. Sample threshold - To identify samples with a lot of missingness. Samples that have missingness above the given threshold will be dropped. 
 5. Experimental group threshold - This filter is applied to make sure each experimental/biological group has a certain percentage of intensities that are present. We usually keep a cut-off of 50% for this filter and if any feature/fragment/protein has all experimental groups with over 50% missingness, it will be dropped.
