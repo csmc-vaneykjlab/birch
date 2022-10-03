@@ -18,16 +18,18 @@ toc-title: "Table of Contents"
 
 params:
   input_plot1_reac : input_plot1_reac
+  balloon_plot_reac_report : balloon_plot_reac_report
   pareto_plot_reac : pareto_plot_reac
-  missing_plots2_reac : missing_plots2_reac
+  missing_plots2_reac_report : missing_plots2_reac_report
   missing_plot3_reac : missing_plot3_reac
   init_table_reac : init_table_reac
   filt_plot1_reac : filt_plot1_reac
+  balloon_plot_reac_report2 : balloon_plot_reac_report2
   filt_plot2_reac : filt_plot2_reac
   filt_plot3_reac : filt_plot3_reac
   filtered_plot1_reac : filtered_plot1_reac
   filtered_plot2_reac : filtered_plot2_reac
-  filtered_plots3_reac : filtered_plots3_reac
+  missing_plots2_reac_report2 : missing_plots2_reac_report2
   filtered_plot4_reac : filtered_plot4_reac
   unnorm_box_reac : unnorm_box_reac
   norm_box_reac : norm_box_reac
@@ -48,6 +50,10 @@ params:
   corr_after_bc_reac : corr_after_bc_reac
 ---
 
+```{r Load R Libraries, include=FALSE}
+library(knitr)
+```
+
 ```{js Move the top-right CODE button, echo=FALSE}
 // https://stackoverflow.com/questions/43009788/insert-a-logo-in-upper-right-corner-of-r-markdown-html-document
 $(document).ready(function() {
@@ -55,9 +61,12 @@ $(document).ready(function() {
 });
 ```
 
-```{r}
+```{r, include = FALSE}
 if (identical(rmarkdown::metadata$runtime, "shiny"))
   shiny::setProgress(0.25)  # set progress to 50%
+
+htmltools::tagList(ggplotly(ggplot()))
+htmltools::tagList(plotly::ggplotly(ggplot()))
 ```
 
 ## Initial analysis {.tabset}
@@ -66,12 +75,28 @@ if (identical(rmarkdown::metadata$runtime, "shiny"))
 grid.draw(params$input_plot1_reac)
 ```
 
+### Sample matrix
+```{r, include = TRUE, echo=FALSE, results="asis"}
+
+#for (i in 1:length(params$balloon_plot_reac_report)) {
+#  params$balloon_plot_reac_report[[i]]
+#}
+
+params$balloon_plot_reac_report[[1]]
+params$balloon_plot_reac_report[[2]]
+
+```
+
 ### Missingness distribution
 ```{r}
 params$pareto_plot_reac
 
-params$missing_plots2_reac[1]
-params$missing_plots2_reac[2]
+#for (i in 1:length(params$missing_plots2_reac_report)) {
+#  params$missing_plots2_reac_report[[i]]
+#}
+
+params$missing_plots2_reac_report[[1]]
+params$missing_plots2_reac_report[[2]]
 
 params$missing_plot3_reac
 ```
@@ -103,10 +128,29 @@ params$filt_plot3_reac
 grid.draw(params$filtered_plot1_reac)
 ```
 
+### Sample matrix after filtering
+```{r, include = TRUE}
+
+#for (i in 1:length(params$balloon_plot_reac_report2)) {
+#  params$balloon_plot_reac_report2[[i]]
+#}
+
+params$balloon_plot_reac_report2[[1]]
+params$balloon_plot_reac_report2[[2]]
+
+```
+
 ### Missingness after filtering
 ```{r}
 params$filtered_plot2_reac
-params$filtered_plots3_reac
+
+#for (i in 1:length(params$missing_plots2_reac_report2)) {
+#  params$missing_plots2_reac_report2[[i]]
+#}
+
+params$missing_plots2_reac_report2[[1]]
+params$missing_plots2_reac_report2[[2]]
+
 params$filtered_plot4_reac
 ```
 
