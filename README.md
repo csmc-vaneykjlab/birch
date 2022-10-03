@@ -30,7 +30,7 @@ Below we list each tab with a description of it includes. For details on the res
 ### Home tab
 When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab just contains details on what BIRCH is and the workflow followed in BIRCH to go from data affected by batch-effect to batch-corrected data. 
 
-![BIRCH settings page](Images/home.PNG)
+![BIRCH home page](Images/home.PNG)
 
 ### Settings tab
 From the home page, the Settings tab can be selected to start the batch-correction process. 
