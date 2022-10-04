@@ -41,8 +41,28 @@ This plot is useful to make sure samples are well distributed across the biologi
 2. Sample matrix:
 The sample matrix section represents the distribution of samples as a matrix of intersections between experimental group and columns to correct on. If multiple columns were chosen to check for batch-effect, multiple balloon plots will be displayed. In this case, there are 3 samples in each of the cells/interections, i.e., digestion group A and biological group Disease_Stg1 has 3 samples as a part of those groups, and so on. 
 
-![BIRCH init anal page1](../Images/initial_analysis_example2.PNG)
+![BIRCH init anal page2](../Images/initial_analysis_example2.PNG)
 
 This plot is useful to ensure not all samples from a particular biological group are in one technical group/pre-processing plate. Ideallly, there should be no intersection that is empty and no intersection with all samples concentrated in one spot.  
 
 3. Missingness:
+The missingness section focuses on the missing intensities in the normalized/unnormalized data table. The first plot seen in this section is a pareto plot which summarizes the missingness in the entire dataset. For our example data, this is how the pareto plot looks like
+
+![BIRCH init anal page3](../Images/initial_analysis_example3.PNG)
+
+This plot shows the percentage of missingness in the x-axis, count of fragments missing that percentage of intensities on the left side of the y-axis, and also shows the fragments missingness percent on the right side of the y-axis. In our example, most fragments are only missing 0-10% of the data, while very few fragments are missing 30-40% and 50-69% of the data. 
+
+Following the pareto plot, heatmaps showing the exact location of missing intensities is plotted per column to correct on and also based on the biological group. 
+
+![BIRCH init anal page4](../Images/initial_analysis_example4.PNG)
+
+In these plots, it can be seen that two fragments have intencities missing for all samples in Digestion_batch group B (annotated in green). If there is a lot of missing data, the heatmap will have more white cells and lesser black cells. 
+
+Ideally we want missingness to be less than 50% in overall data. 
+
+4. Take aways:
+This is the final section in inital analysis and it summarizes all the plots/statistics represented in the other sub-sections. A very detailed explaination on the imporatnce of sample distribution and missingness is provided in this section, along with recommendations on what the ideal situation would look like. For our example dataset, this is what the inital analysis looks like - 
+
+![BIRCH init anal page5](../Images/initial_analysis_example5.PNG)
+
+It can be seen that except for the "Plates_passing_distri_cutoff" (which is to have atleast 25 samples per plate), all the other criteria are met in this dataset. 
