@@ -8,17 +8,41 @@
 - [Results](#results)
 
 ### Home
-When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab just contains details on what BIRCH is and the workflow followed in BIRCH to go from data affected by batch-effect to batch-corrected data. 
+When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab contains details on what BIRCH is and the workflow followed in BIRCH to go from data influenced by batch-effect to batch-corrected data. 
 
-![BIRCH settings page](../Images/home.PNG)
+![BIRCH home page](../Images/home.PNG)
 
 ### Settings
 From the home tab, you can navigate to the settings tab to set input parameters for batch correction. For this example, we will use a dummy dataset to demonstrate the entire process and make note of the things to look out for while dealing with your own data.  
 
-To begin with analysis, you can either download [example_dataset.zip](https://github.com/csmc-vaneykjlab/BatchCorrectionTool/tree/main/example/example_dataset.zip) the example dataset and give it as input to the respective parameters, or you can click on "Load example data" to pre-load all the input parameters. 
+To begin with analysis, you can either download [example_dataset.zip](https://github.com/csmc-vaneykjlab/BatchCorrectionTool/tree/main/example/example_dataset.zip) and give it as input to the respective parameters, or you can click on "Load example data" to pre-load all the input parameters. 
 
 Using the example dataset, once the files are uploaded, the other parameters that need to be chosen are as follows:
-Argument 3 - ProteinName - this is the column that contains unique fragment/peptide/protein names.  
-Argument 5 - Digestion_batch - this is the column from the annotation file that represents the field/batch that needs to be analyzed for batch-effect and corrected. 
-Argument 6 - ExperimentalGroup - this column from the annotation file that represents the biological group in which we want to see and retain valid variation. 
-Argument 7 - SampleName - this argument maps the sample names (columns) in normalized/unnormalized intensities file, with the sample names in the annotation file where each row is a sample. 
+- Argument 3 - ProteinName - this is the column that contains unique fragment/peptide/protein names.  
+- Argument 5 - Digestion_batch - this is the column from the annotation file that represents the field/batch that needs to be analyzed for batch-effect and corrected. 
+- Argument 6 - ExperimentalGroup - this column from the annotation file that represents the biological group in which we want to see and retain valid variation. 
+- Argument 7 - SampleName - this argument maps the sample names (columns) in normalized/unnormalized intensities file, with the sample names in the annotation file where each row is a sample. 
+
+Once all the options are chosen and files are uploaded, a preview of the files will be visible in the main screen. The settings tab looks as follows after all the input parameters are provided appropriately:
+![BIRCH settings page](../Images/settings_example.PNG)
+
+NOTE: Make sure to follow the instructions in the main GitHub page for instructions while using your own data. 
+
+### Initial analysis
+The initial analysis tab becomes active after clicking the "Next" button in the settings tab, once all the input options are verfied and accepted. This tab is a dynamic tab without user input and only contains statistics and plots created using the uploaded data. This tab further contains 4 sub-parts as follows:
+
+1. Sample distribution: 
+This section contains a stacked bar-plot displaying the distribution of samples among the chosen biological/experimental group and the column/s to correct on. In the exmaple data, the biological group is called "ExperimentalGroup" and the chosen column to correct on is "Digestion_batch", and these are the ones shown in the bar plot. Furthermore, in this particular sample set-up, it looks like there are exactly 9 samples (represnting 33.33% of all samples) per biological group (Disease_Stg1, Disease_Stg2 and Healthy) as well as digestion batch (groups A, B and C). 
+
+![BIRCH init anal page1](../Images/initial_analysis_example1.PNG)
+
+This plot is useful to make sure samples are well distributed across the biological group and column to correct on. It is recommended to have an equal distribution of samples and to have atleast 25 samples per biological/technical group. 
+
+2. Sample matrix:
+The sample matrix section represents the distribution of samples as a matrix of intersections between experimental group and columns to correct on. If multiple columns were chosen to check for batch-effect, multiple balloon plots will be displayed. In this case, there are 3 samples in each of the cells/interections, i.e., digestion group A and biological group Disease_Stg1 has 3 samples as a part of those groups, and so on. 
+
+![BIRCH init anal page1](../Images/initial_analysis_example2.PNG)
+
+This plot is useful to ensure not all samples from a particular biological group are in one technical group/pre-processing plate. Ideallly, there should be no intersection that is empty and no intersection with all samples concentrated in one spot.  
+
+3. Missingness:

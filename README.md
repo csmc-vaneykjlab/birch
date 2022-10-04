@@ -28,7 +28,7 @@ The general workflow is as follows:
 Below we list each tab with a description of it includes. For details on the results generated and to understand how to use the plots/analysis, please refer to the example usage above. 
 
 ### Home tab
-When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab just contains details on what BIRCH is and the workflow followed in BIRCH to go from data affected by batch-effect to batch-corrected data. 
+When the BIRCH web-app initially loads, the home tab is displayed at first. The home tab contains details on what BIRCH is and the workflow followed in BIRCH to go from data influenced by batch-effect to batch-corrected data. 
 
 ![BIRCH home page](Images/home.PNG)
 
