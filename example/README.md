@@ -4,7 +4,7 @@
 - [Home](#home)
 - [Settings](#settings)
 - [Initial Analysis](#initial-analysis)
-- [Diagnosis+Filtering](#diagnosis+filtering)
+- [Diagnosis\+Filtering](#diagnosis\+filtering)
 - [Results](#results)
 
 ### Home
@@ -67,7 +67,7 @@ This is the final section in inital analysis and it summarizes all the plots/sta
 
 It can be seen that except for the "Plates_passing_distri_cutoff" (which is to have atleast 25 samples per plate), all the other criteria are met in this dataset. 
 
-### Diagnosis+Filtering
+### Diagnosis\+Filtering
 After validating whether the uploaded dataset is accurate for batch-correction with respect to randomization in sample distribution and missingness, it is time to determine the technical factor with the most amount of variation. Once the appropriate technical factor is chosen, batch-correction and imputation can be applied for further analysis. 
 
 In this tab, initially, the user can choose the type of imputation to be used for the project. There are two types of imputation methods available, half-minimum and ranger (that uses a random forest model). For the purposes of this example, we can use half-minimum imputation which is faster. After choosing the imputation method and clicking on the submit button, a PVCA is calculated and plotted. The first bar in this plot represents the factor (technical or biological) that has the most amount of variation. Once the PVCA is plotted, the factor with the most variation is chosen as the batch to correct on. In this case example, digestion batch has the most amount of variation so that is chosen as the factor to correct on. Furthermore, additional input parameters appear in the left panel for user input. At this point, the app looks as follows - 
@@ -84,4 +84,19 @@ The additional input parameters (input for example in bold) are:
 Once all the input parameters are provided, the continue button becomes available, which when clicked renders some plots that show how the filtering criteria will affect your data.
 
 You can then hit the "Go to Results" button to view the final results. 
+
+### Results
+This is the last tab that consists of all the final analysis and results, emnbedded in individual sub-sections. 
+
+The initial "Filtered results" tab has all the details on data before and after filtering, along with the same plots that were in Initial analysis, to aid in comparison between before and after filtering. In the example dataset, 2 fragments did not pass the batch threshold and were thus filtered out. None of the samples were filtered out since they all met the filtering threshold requirement. This is how the filtered stats appear in the Results - 
+
+![BIRCH results page1](../Images/results_filt_example1.PNG)
+
+Similarly, the pareto plot and missingness plots without the 2 fragments that were filtered out looks as follows - 
+
+![BIRCH results page3](../Images/results_filt_example3.PNG)
+
+![BIRCH results page2](../Images/results_filt_example2.PNG)
+
+As you can see, the heatmaps don't contain the fragments that had intensities missing for the entire batch and the pareto plots now has only one bar.
 
