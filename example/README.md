@@ -17,7 +17,7 @@ From the home tab, you can navigate to the settings tab to set input parameters 
 
 To begin with analysis, you can either download [example_dataset.zip](https://github.com/csmc-vaneykjlab/BatchCorrectionTool/tree/main/example/example_dataset.zip) and give it as input to the respective parameters, or you can click on "Load example data" to pre-load all the input parameters. 
 
-Using the example dataset, once the files are uploaded, the other parameters that need to be chosen are as follows:
+Using the example dataset, once the files are uploaded, the other parameters that need to be chosen (in bold for example dataset) are as follows:
 - Argument 3 - **ProteinName** - this is the column that contains unique fragment/peptide/protein names.  
 - Argument 5 - **Digestion_batch** - this is the column from the annotation file that represents the field/batch that needs to be analyzed for batch-effect and corrected. 
 - Argument 6 - **ExperimentalGroup** - this column from the annotation file that represents the biological group in which we want to see and retain valid variation. 
@@ -66,3 +66,22 @@ This is the final section in inital analysis and it summarizes all the plots/sta
 ![BIRCH init anal page5](../Images/initial_analysis_example5.PNG)
 
 It can be seen that except for the "Plates_passing_distri_cutoff" (which is to have atleast 25 samples per plate), all the other criteria are met in this dataset. 
+
+### Diagnosis+Filtering
+After validating whether the uploaded dataset is accurate for batch-correction with respect to randomization in sample distribution and missingness, it is time to determine the technical factor with the most amount of variation. Once the appropriate technical factor is chosen, batch-correction and imputation can be applied for further analysis. 
+
+In this tab, initially, the user can choose the type of imputation to be used for the project. There are two types of imputation methods available, half-minimum and ranger (that uses a random forest model). For the purposes of this example, we can use half-minimum imputation which is faster. After choosing the imputation method and clicking on the submit button, a PVCA is calculated and plotted. The first bar in this plot represents the factor (technical or biological) that has the most amount of variation. Once the PVCA is plotted, the factor with the most variation is chosen as the batch to correct on. In this case example, digestion batch has the most amount of variation so that is chosen as the factor to correct on. Furthermore, additional input parameters appear in the left panel for user input. At this point, the app looks as follows - 
+
+![BIRCH diagnosis page](../Images/diagnosis_example.PNG)
+
+The additional input parameters (input for example in bold) are:
+- Prefix for otuput files - **test** - Default value is test, which can be updated to anything you would like. These are files that will be available at in the Results (Download) section. 
+- iRT protein name - **1/iRT_protein** - This optional parameter is used for plotting individual feature diagnostics like iRT peptides. 
+- Experimental group:batch combo - Another optional parameter used for plotting correlation between QC samples across batches. This parameter can be provided only if the experimental design incldes QC samples. 
+- Variable to correct on - **Digestion_batch** - Auto chosen by the algorithm depending on the factor with most variation. If biological group has most variation to begin with, a note suggesting batch-correction is not required will be generated. In the case of the example, Digestion_batch is chosen. 
+- Filtering criteria - Set at defaults - Keep the same for example dataset. Refer to main GitHub page for details on what each of the filters mean. 
+
+Once all the input parameters are provided, the continue button becomes available, which when clicked renders some plots that show how the filtering criteria will affect your data.
+
+You can then hit the "Go to Results" button to view the final results. 
+
