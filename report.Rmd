@@ -148,8 +148,8 @@ for (i in 1:length(params$missing_plots2_reac_report2)) {
   params$missing_plots2_reac_report2[[i]]
 }
 
-params$missing_plots2_reac_report2[[1]]
-params$missing_plots2_reac_report2[[2]]
+#params$missing_plots2_reac_report2[[1]]
+#params$missing_plots2_reac_report2[[2]]
 
 params$filtered_plot4_reac
 ```
