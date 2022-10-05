@@ -98,5 +98,12 @@ Similarly, you can see that the missingness heatmaps don't contain the fragments
 
 ![BIRCH results page2](../Images/results_filt_example2.PNG)
 
+Some of the other important features in the results section are the PVCA and PCA plots. From the example dataset, it can be seen that Digestion batch has most variation (PVCA) and distinct clusters (PCA) before correction. However, with combat only batch-correction, all the variation in Digestion batch (PVCA) is gone and only the relevant biological group variation is retained. Even the PCA after combat only batch-correction shows that the distinct clusters no longer exist. On the other hand, combat+loess batch-correction seems to over-correct and get rid of the biological variation (PVCA). For this reason, it seems like combat only batch-correction is enough and accurate for this particular dataset. The PVCA and PCA plots before, after combat only and after combat+loess batch-correction looks like this - 
 
+![BIRCH results page4](../Images/results_pvca_example.PNG)
 
+![BIRCH results page5](../Images/results_pca_example.PNG)
+
+Lastly, the Downloads section contains buttons to be able to download all the required files, along with a report that contains all the plots and results within the app. The downloadable files include pre and post imputed, batch-corrected files, filtered files, and so on. A note regarding the most appropriate method of batch-correction (combat only or combat+loess) for your dataset will also be printed. For our example dataset, combat only seems to be the most applicable, which is what the note also suggests. 
+
+![BIRCH results page6](../Images/results_downloads_example.PNG)
