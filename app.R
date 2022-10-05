@@ -912,19 +912,19 @@ ui <- tagList(
       tabPanel(
         "Diagnosis+Filtering",
         sidebarPanel(
-          radioButtons("impute_method", "Choose the method to be used for imputation", methods),
-          textInput("output_prefix", label = "Pick a prefix for output files", value = "test"),
+          radioButtons("impute_method", "Choose the method to be used for imputation*", methods),
+          textInput("output_prefix", label = "Pick a prefix for output files*", value = "test"),
           textInput("iRT_prot", label = "Enter the name of your iRT protein as listed in your data file"),
           selectInput("samps_for_corr", "Choose the \"experimental group:batch\" combo for correlation. Pro tip: Use replicates here.", choices=c(), multiple=TRUE, selected=NULL),
-          selectInput("var_to_correct_on", "Choose the variable you would like to correct on:", choices=c()),
+          selectInput("var_to_correct_on", "Choose the variable you would like to correct on*:", choices=c()),
           sliderInput(inputId = "sample_threshold", 
-                      label = "Sample Threshold", 
+                      label = "Sample Threshold*", 
                       value = 0.7, min = 0, max = 1),
           sliderInput(inputId = "expgrp_threshold", 
-                      label = "Experimental group Threshold", 
+                      label = "Experimental group Threshold*", 
                       value = 0.5, min = 0, max = 1),
           sliderInput(inputId = "batch_threshold", 
-                      label = "Batch Threshold", 
+                      label = "Batch Threshold*", 
                       value = 0.7, min = 0, max = 1),
           tags$div(style="display:inline-block",title="CAUTION: Once the submit button is hit the imputation method cannot be changed since re-imputing will take a lot of time. Be sure to select the appropriate option before hitting Submit.",actionButton("submitId2", "Submit"), class = "btn-warning"),
           #actionButton("submitId2", "Submit"),
@@ -3014,7 +3014,7 @@ server <- function(input, output, session) {
       pvca_dict_after_across[label] <- weight
     }
     
-    pvca_plot <- annotate_figure(plot, top = text_grob("After combat and loess batch-correction", color = "black", face = "bold", size = 15))
+    pvca_plot <- annotate_figure(plot, top = text_grob("After combat only batch-correction", color = "black", face = "bold", size = 15))
     
     to_return <- list(pvca_dict_after_across = pvca_dict_after_across, pvca_plot = pvca_plot)
     return(to_return)

@@ -86,17 +86,17 @@ Once all the input parameters are provided, the continue button becomes availabl
 You can then hit the "Go to Results" button to view the final results. 
 
 ### Results
-This is the last tab that consists of all the final analysis and results, emnbedded in individual sub-sections. 
+This is the last tab that consists of all the final analysis and results, emnbedded in individual sub-sections. Since this section has a lot of results available, only the most important plots are explained below. 
 
-The initial "Filtered results" tab has all the details on data before and after filtering, along with the same plots that were in Initial analysis, to aid in comparison between before and after filtering. In the example dataset, 2 fragments did not pass the batch threshold and were thus filtered out. None of the samples were filtered out since they all met the filtering threshold requirement. This is how the filtered stats appear in the Results - 
+The initial "Filtered results" section has all the details on data before and after filtering, along with the same plots that were in Initial analysis, to aid in comparison between before and after filtering. In the example dataset, 2 fragments did not pass the batch threshold and were thus filtered out. None of the samples were filtered out since they all met the filtering threshold requirement. This is how the filtered stats appear in the Results - 
 
 ![BIRCH results page1](../Images/results_filt_example1.PNG)
 
-Similarly, the pareto plot and missingness plots without the 2 fragments that were filtered out looks as follows - 
+Similarly, you can see that the missingness heatmaps don't contain the fragments that had intensities missing for the entire batch and the pareto plots now has only one bar. A this point, the missingness heatmaps and pareto plot without the two fragments that were filtered out looks as follows - 
 
 ![BIRCH results page3](../Images/results_filt_example3.PNG)
 
 ![BIRCH results page2](../Images/results_filt_example2.PNG)
 
-As you can see, the heatmaps don't contain the fragments that had intensities missing for the entire batch and the pareto plots now has only one bar.
+
 
