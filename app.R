@@ -3191,7 +3191,7 @@ server <- function(input, output, session) {
     psi_before <- plot_spike_in(sample_long.logged_bc_across(), annotation_data_filt(),
                                 peptide_annotation = frag_anno_for_iRT(),
                                 protein_col = protein, spike_ins = iRT_prot_val(),
-                                plot_title = 'Fragments - After Combat Batch Correction',
+                                plot_title = 'Fragments - After Combat Only Batch Correction',
                                 color_by_batch = TRUE, batch_col = var_to_correct_on, color_scheme = color_list[[var_to_correct_on]])
     psi_before <- psi_before + theme(legend.position="right")
     print(psi_before)
@@ -3214,7 +3214,7 @@ server <- function(input, output, session) {
     psi_before <- plot_spike_in(sample_long.logged_bc(), annotation_data_filt(),
                                 peptide_annotation = frag_anno_for_iRT(),
                                 protein_col = protein, spike_ins = iRT_prot_val(),
-                                plot_title = 'Fragments - After Batch Correction',
+                                plot_title = 'Fragments - After Combat and Loess Batch Correction',
                                 color_by_batch = TRUE, batch_col = var_to_correct_on, color_scheme = color_list[[var_to_correct_on]])
     psi_before <- psi_before + theme(legend.position="right")
     print(psi_before)

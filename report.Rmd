@@ -76,10 +76,14 @@ grid.draw(params$input_plot1_reac)
 ```
 
 ### Sample matrix
-```{r, include = TRUE, echo=FALSE, results="asis"}
+```{r, include = TRUE, results="asis"}
 
-for (i in 1:length(params$balloon_plot_reac_report)) {
-  params$balloon_plot_reac_report[[i]]
+if (length(params$balloon_plot_reac_report) == 1) {
+  params$balloon_plot_reac_report[[1]]
+} else {
+  for (i in params$balloon_plot_reac_report) {
+    print(i)
+  }
 }
 
 #params$balloon_plot_reac_report[[1]]
@@ -91,8 +95,12 @@ for (i in 1:length(params$balloon_plot_reac_report)) {
 ```{r}
 params$pareto_plot_reac
 
-for (i in 1:length(params$missing_plots2_reac_report)) {
-  params$missing_plots2_reac_report[[i]]
+if (length(params$missing_plots2_reac_report) == 1) {
+  params$missing_plots2_reac_report[[1]]
+} else {
+  for (i in params$missing_plots2_reac_report) {
+    print(i)
+  }
 }
 
 #params$missing_plots2_reac_report[[1]]
@@ -131,9 +139,14 @@ grid.draw(params$filtered_plot1_reac)
 ### Sample matrix after filtering
 ```{r, include = TRUE}
 
-for (i in 1:length(params$balloon_plot_reac_report2)) {
-  params$balloon_plot_reac_report2[[i]]
+if (length(params$balloon_plot_reac_report2) == 1) {
+  params$balloon_plot_reac_report2[[1]]
+} else {
+  for (i in params$balloon_plot_reac_report2) {
+    print(i)
+  }
 }
+
 
 #params$balloon_plot_reac_report2[[1]]
 #params$balloon_plot_reac_report2[[2]]
@@ -144,8 +157,12 @@ for (i in 1:length(params$balloon_plot_reac_report2)) {
 ```{r}
 params$filtered_plot2_reac
 
-for (i in 1:length(params$missing_plots2_reac_report2)) {
-  params$missing_plots2_reac_report2[[i]]
+if (length(params$missing_plots2_reac_report2) == 1) {
+  params$missing_plots2_reac_report2[[1]]
+} else {
+  for (i in params$missing_plots2_reac_report2) {
+    print(i)
+  }
 }
 
 #params$missing_plots2_reac_report2[[1]]
