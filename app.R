@@ -1141,7 +1141,7 @@ server <- function(input, output, session) {
                 "GitHub"),
               a(href="https://github.com/csmc-vaneykjlab/BatchCorrectionTool", class="btn btn-default",
                 "Cite us"),
-              a(href="mailto:ArchanaSubrama.Bhat@cshs.org", class="btn btn-default",
+              a(href="mailto:GroupHeartBioinformaticsSupport@cshs.org", class="btn btn-default",
                 "Email")),
           div(style="text-align:center;margin-top: 20px",
               HTML("")),
