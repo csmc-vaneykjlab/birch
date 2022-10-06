@@ -738,12 +738,12 @@ plotly_corr <- function(for_heatmap, anno_for_corr, col_element, replicate_filen
     add_col_annotation(
       colors = corr_anno_2,
       side = "top",
-      anno_df
+      anno_df2
     ) %>%
     add_row_annotation(
       colors = corr_anno_2,
       side = "left",
-      anno_df2
+      anno_df
     )
   p <- p %>% 
     # convert IHeatmapR object to Plotly object, needed to embed in HTML
