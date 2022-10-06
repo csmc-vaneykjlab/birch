@@ -725,6 +725,8 @@ plotly_corr <- function(for_heatmap, anno_for_corr, col_element, replicate_filen
   
   p <- main_heatmap(
     sample_matrix.corr,
+    zmin = min(0.75),
+    zmax = max(1.00),
     name = "Scaled<br>Intensity",
     colors = "RdYlBu",
     tooltip = setup_tooltip_options(
