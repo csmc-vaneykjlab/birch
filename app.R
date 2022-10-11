@@ -1046,7 +1046,7 @@ ui <- tagList(
                    hr(style = "border-top: 1px solid #000000;"),
                    
                    h5(strong("Primary files for down-stream analysis:")),
-                   textOutput("bc_type_selection_note"),
+                   htmlOutput("bc_type_selection_note"),
                    linebreaks(2),
                    downloadButton("after_preimpute", "After complete batch-correction, pre-imputed file"),
                    linebreaks(2),
@@ -3514,9 +3514,9 @@ server <- function(input, output, session) {
   output$bc_type_selection_note <- renderText ({
     final_score <- bc_type_selection()
     if (final_score == "complete") {
-      return("Based on PVCA plots, we recommend you use combat+loess (complete) data for downstream analysis since variation in experimental group is maintained, and variation in other columns of interest have reduced with this type of batch correction. These are the first two files in this section below.")
+      paste("Based on PVCA plots, we recommend you use ", "<b>Combat+Loess (Complete batch correction) data </b>", "for downstream analysis since variation in experimental group is maintained, and variation in other columns of interest have reduced with this type of batch correction. These are the first two files in this section below.")
     } else if (final_score == "across") {
-      return("Based on PVCA plots, we recommend you use combat only data for downstream analysis since variation in experimental group is maintained, and variation in other columns of interest have reduced with this type of batch correction. These are the last two files in this section below.")
+      paste("Based on PVCA plots, we recommend you use ", "<b>Combat only (Correction across batches) data </b>", "for downstream analysis since variation in experimental group is maintained, and variation in other columns of interest have reduced with this type of batch correction. These are the last two files in this section below.")
     }
   })
   
