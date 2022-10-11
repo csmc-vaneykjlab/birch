@@ -11,7 +11,7 @@
 - [License](#license)
 
 ## What is BIRCH
-[BIRCH](https://birch-tool.herokuapp.com/) (**B**atch-effect **I**dentification, **R**ectification, and **C**onclusive-anlaysis on **H**eterogenous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. 
+[BIRCH](https://birch-tool.herokuapp.com/) (**B**atch-effect **I**dentification, **R**epresentation and **C**orrection on **H**eterogeneous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. 
 
 ## Requirements
 - Web Browser (Google Chrome, Mozilla Firefox, Microsoft Edge, Safari) with stable internet connection. 

@@ -1132,7 +1132,7 @@ server <- function(input, output, session) {
           div(style="text-align:center;margin-top:20px;font-size:140%;color:darkorange",
               HTML("<em>Welcome to BIRCH</em>")),
           div(style="width:fit-content;width:-webkit-fit-content;width:-moz-fit-content;font-size:100%;margin-top:10px",
-              HTML("<b>BIRCH</b> (Batch-effect Identification, Rectification, and Conclusive-anlaysis on Heterogenous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. The steps involved in individual tabs are as follows:")),
+              HTML("<b>BIRCH</b> (Batch-effect Identification, Representation and Correction on Heterogeneous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. The steps involved in individual tabs are as follows:")),
           div(style="text-align:center;margin-top: 20px",
               a(href='#',
                 img(src = "workflow.PNG", height = 300, width = 600))),
@@ -1785,9 +1785,22 @@ server <- function(input, output, session) {
         sample_names <- sample_names_val()
         color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
         protein <- protein_val()
-        overlaps <- call_missing_vals(sample_matrix(), annotation_data(), index_char, protein)
-        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
-        return(miss_plot)
+        na_count <- sum(is.na(sample_matrix())) 
+        if (na_count >= 1) {
+          overlaps <- call_missing_vals(sample_matrix(), annotation_data(), index_char, protein)
+          miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
+          return(miss_plot)
+        } else {
+          df <- data.frame()
+          p <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 10) +
+            annotate("text", x=3.9, y=5.0, size=40, col="red", label="(" ) +
+            annotate("text", x=5, y=5.6, size=12, col="red", label="o  o" ) +
+            annotate("text", x=6.1, y=5.0, size=40, col="red", label=")" ) +
+            annotate("text", x=5, y=5.1, size=12, col="red", label="|" ) +
+            geom_segment(aes(x = 4.7, xend = 5.3, y = 4.4, yend = 4.4), size=2, color="red") +
+            annotate("text", x=5, y=2.5, size=8, col="red", label="No missingness")
+          return(p)
+        }
       })
     })
   }
@@ -1822,8 +1835,22 @@ server <- function(input, output, session) {
         sample_names <- sample_names_val()
         color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
         protein <- protein_val()
-        overlaps <- call_missing_vals(sample_matrix(), annotation_data(), index_char, protein)
-        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
+        na_count <- sum(is.na(sample_matrix())) 
+        if (na_count >= 1) {
+          overlaps <- call_missing_vals(sample_matrix(), annotation_data(), index_char, protein)
+          miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
+          return(miss_plot)
+        } else {
+          df <- data.frame()
+          p <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 10) +
+            annotate("text", x=3.9, y=5.0, size=40, col="red", label="(" ) +
+            annotate("text", x=5, y=5.6, size=12, col="red", label="o  o" ) +
+            annotate("text", x=6.1, y=5.0, size=40, col="red", label=")" ) +
+            annotate("text", x=5, y=5.1, size=12, col="red", label="|" ) +
+            geom_segment(aes(x = 4.7, xend = 5.3, y = 4.4, yend = 4.4), size=2, color="red") +
+            annotate("text", x=5, y=2.5, size=8, col="red", label="No missingness")
+          return(p)
+        }
       })
     }
     return(missing_plots)
@@ -1843,8 +1870,22 @@ server <- function(input, output, session) {
     sample_names <- sample_names_val()
     color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
     protein <- protein_val()
-    overlaps <- call_missing_vals(sample_matrix(), annotation_data(), exp_grp, protein)
-    miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp, protein)
+    na_count <- sum(is.na(sample_matrix())) 
+    if (na_count >= 1) {
+      overlaps <- call_missing_vals(sample_matrix(), annotation_data(), exp_grp, protein)
+      miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp, protein)  
+      return(miss_plot2)
+    } else {
+      df <- data.frame()
+      p <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 10) +
+        annotate("text", x=3.9, y=5.0, size=40, col="red", label="(" ) +
+        annotate("text", x=5, y=5.6, size=12, col="red", label="o  o" ) +
+        annotate("text", x=6.1, y=5.0, size=40, col="red", label=")" ) +
+        annotate("text", x=5, y=5.1, size=12, col="red", label="|" ) +
+        geom_segment(aes(x = 4.7, xend = 5.3, y = 4.4, yend = 4.4), size=2, color="red") +
+        annotate("text", x=5, y=2.5, size=8, col="red", label="No missingness")
+      return(p)
+    }
     
     return(miss_plot2)
   })
@@ -2495,9 +2536,22 @@ server <- function(input, output, session) {
         sample_names <- sample_names_val()
         color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
         protein <- protein_val()
-        overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), index_char, protein)
-        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
-        return(miss_plot)
+        na_count <- sum(is.na(sample_matrix())) 
+        if (na_count >= 1) {
+          overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), index_char, protein)
+          miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
+          return(miss_plot)
+        } else {
+          df <- data.frame()
+          p <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 10) +
+            annotate("text", x=3.9, y=5.0, size=40, col="red", label="(" ) +
+            annotate("text", x=5, y=5.6, size=12, col="red", label="o  o" ) +
+            annotate("text", x=6.1, y=5.0, size=40, col="red", label=")" ) +
+            annotate("text", x=5, y=5.1, size=12, col="red", label="|" ) +
+            geom_segment(aes(x = 4.7, xend = 5.3, y = 4.4, yend = 4.4), size=2, color="red") +
+            annotate("text", x=5, y=2.5, size=8, col="red", label="No missingness")
+          return(p)
+        }
       })
     })
   }
@@ -2532,9 +2586,22 @@ server <- function(input, output, session) {
         sample_names <- sample_names_val()
         color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
         protein <- protein_val()
-        overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), index_char, protein)
-        miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
-        #print(miss_plot)
+        na_count <- sum(is.na(sample_matrix())) 
+        if (na_count >= 1) {
+          overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), index_char, protein)
+          miss_plot <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, index_char, protein)
+          return(miss_plot)
+        } else {
+          df <- data.frame()
+          p <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 10) +
+            annotate("text", x=3.9, y=5.0, size=40, col="red", label="(" ) +
+            annotate("text", x=5, y=5.6, size=12, col="red", label="o  o" ) +
+            annotate("text", x=6.1, y=5.0, size=40, col="red", label=")" ) +
+            annotate("text", x=5, y=5.1, size=12, col="red", label="|" ) +
+            geom_segment(aes(x = 4.7, xend = 5.3, y = 4.4, yend = 4.4), size=2, color="red") +
+            annotate("text", x=5, y=2.5, size=8, col="red", label="No missingness")
+          return(p)
+        }
       })
     }
     return(missing_plots)
@@ -2554,9 +2621,22 @@ server <- function(input, output, session) {
     sample_names <- sample_names_val()
     color_list <- create_color_list(annotation_data(),  as.character(rv()), exp_grp, sample_names)
     protein <- protein_val()
-    overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), exp_grp, protein)
-    miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp, protein)
-    return(miss_plot2)
+    na_count <- sum(is.na(sample_matrix())) 
+    if (na_count >= 1) {
+      overlaps <- call_missing_vals(sample_matrix_filt(), annotation_data_filt(), exp_grp, protein)
+      miss_plot2 <- plot_missval(overlaps, FONTSIZE_sample_axis, color_list, exp_grp, protein)
+      return(miss_plot2)
+    } else {
+      df <- data.frame()
+      p <- ggplot(df) + geom_point() + xlim(0, 10) + ylim(0, 10) +
+        annotate("text", x=3.9, y=5.0, size=40, col="red", label="(" ) +
+        annotate("text", x=5, y=5.6, size=12, col="red", label="o  o" ) +
+        annotate("text", x=6.1, y=5.0, size=40, col="red", label=")" ) +
+        annotate("text", x=5, y=5.1, size=12, col="red", label="|" ) +
+        geom_segment(aes(x = 4.7, xend = 5.3, y = 4.4, yend = 4.4), size=2, color="red") +
+        annotate("text", x=5, y=2.5, size=8, col="red", label="No missingness")
+      return(p)
+    }
   })
   
   output$filtered_plot4 <- renderPlot({
