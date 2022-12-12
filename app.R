@@ -1135,7 +1135,7 @@ server <- function(input, output, session) {
               HTML("<b>BIRCH</b> (Batch-effect Identification, Representation and Correction on Heterogeneous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. The steps involved in individual tabs are as follows:")),
           div(style="text-align:center;margin-top: 20px",
               a(href='#',
-                img(src = "workflow.PNG", height = 300, width = 600))),
+                img(src = "workflow.PNG", height = 600, width = 300))),
           div(style="text-align:center;margin-top: 20px",
               a(href="https://github.com/csmc-vaneykjlab/BatchCorrectionTool", class="btn btn-default",
                 "GitHub"),
