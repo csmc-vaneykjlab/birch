@@ -380,6 +380,30 @@ plot_per_sample <- function(overlaps, FONTSIZE_sample_axis, SAMPLE_NA_CUTOFF, co
 
 # function for minimal filtering
 minimal_filtering <- function(sample_matrix, annotation_data, group_by, protein) {
+  # Remove samples that are singletons, i.e., 1 sample in a plate
+  # get those plates
+  plates_with_1_sample <- annotation_data %>%
+    dplyr::count(across(group_by)) %>%
+    dplyr::filter(n <= 1)
+  
+  # convert plates to list
+  plates_with_1_sample_list <- as.vector(plates_with_1_sample[[group_by]])
+  
+  # get corresponding sample names
+  samples_to_remove <- annotation_data[annotation_data[[group_by]] %in% plates_with_1_sample_list,] %>%
+    dplyr::select(FullRunName)
+  
+  # convert to list
+  samples_to_remove_list <- as.vector(samples_to_remove$FullRunName)
+  
+  # drop columns based on names from the original dataframe 
+  sample_matrix = dplyr::select(sample_matrix, -all_of(samples_to_remove_list))
+  
+  # remove rows from copy of annotation as well
+  annotation_data = annotation_data[!(annotation_data$FullRunName %in% samples_to_remove_list),] %>% droplevels()
+  row.names(annotation_data) <- NULL 
+  
+  # continue with min filt of fragments
   results_matrix <- sample_matrix
   results_matrix[is.na(results_matrix)] = 0
   
@@ -408,7 +432,9 @@ minimal_filtering <- function(sample_matrix, annotation_data, group_by, protein)
   # removing from matrix if missval contains the fragment
   sample_matrix = sample_matrix[!(sample_matrix$Protein %in%  frags_to_remove),]
   
-  return(sample_matrix)
+  list_dfs <- list(sample_matrix, annotation_data)
+  return(list_dfs)
+  #return(sample_matrix)
 }
 
 # function to filter fragments using thresholds
@@ -433,7 +459,7 @@ filter_samples <- function(df, annotation, sample_missingness, expgroup_missingn
   fil_df = dplyr::select(df, -samples_to_remove)
   
   # remove rows from copy of annotation as well
-  annotation = annotation[!(annotation$FullRunName %in% samples_to_remove),]
+  annotation = annotation[!(annotation$FullRunName %in% samples_to_remove),] %>% droplevels()
   row.names(annotation) <- NULL 
   
   ##### LOGGING ######
@@ -996,6 +1022,16 @@ ui <- tagList(
                    
                         h5(strong("Plot showing missingness distribution across experimental group (after filtering)")),
                         plotOutput("filtered_plot4") %>% withSpinner(color="#0dc5c1")),
+                      
+                      tabPanel("Take aways",
+                               h5(strong("Stats based on sample distribution and missingness:")),
+                               tableOutput("init_table2")  %>% withSpinner(color="#0dc5c1"),
+                               linebreaks(1),
+                               
+                               textOutput("missing_note_filt"),
+                               hr(style = "border-top: 1px solid #000000;"),
+                               linebreaks(1)),
+                      
                    ),
                   ),
           tabPanel("Normalization",
@@ -1077,8 +1113,8 @@ ui <- tagList(
 
 ################### server
 server <- function(input, output, session) {
-  # increase file upload size limit to 60 MB
-  options(shiny.maxRequestSize=90*1024^2)
+  # increase file upload size limit to 10 MB
+  options(shiny.maxRequestSize=10*1024^2)
   
   # To validate input
   iv <- InputValidator$new()
@@ -2317,12 +2353,15 @@ server <- function(input, output, session) {
     req(input$continue)
     
     sample_matrix <- sample_matrix()
-    sample_matrix <- minimal_filtering(sample_matrix, annotation_data(), var_to_correct_on_final(), protein_val())
-    sample_matrix <- filter_samples(sample_matrix, annotation_data(), sample_threshold_val(), expgrp_threshold_val(), var_to_correct_on_final(), batch_threshold_val(), exp_grp_val(), protein_val())
+    sample_matrix_min_filt <- minimal_filtering(sample_matrix, annotation_data(), var_to_correct_on_final(), protein_val())
+    annotation_data <- as.data.frame(sample_matrix_min_filt[[2]])
+    sample_matrix <- as.data.frame(sample_matrix_min_filt[[1]])
+    sample_matrix <- filter_samples(sample_matrix, annotation_data, sample_threshold_val(), expgrp_threshold_val(), var_to_correct_on_final(), batch_threshold_val(), exp_grp_val(), protein_val())
     
     sample_matrix_unnorm <- sample_matrix_unnorm()
-    sample_matrix_unnorm <- minimal_filtering(sample_matrix_unnorm, annotation_data(), var_to_correct_on_final(),  protein_val())
-    sample_matrix_unnorm <- filter_samples(sample_matrix_unnorm, annotation_data(), sample_threshold_val(), expgrp_threshold_val(), var_to_correct_on_final(), batch_threshold_val(),exp_grp_val(), protein_val())
+    sample_matrix_unnorm_min_filt <- minimal_filtering(sample_matrix_unnorm, annotation_data(), var_to_correct_on_final(),  protein_val())
+    sample_matrix_unnorm <- as.data.frame(sample_matrix_unnorm_min_filt[[1]])
+    sample_matrix_unnorm <- filter_samples(sample_matrix_unnorm, annotation_data, sample_threshold_val(), expgrp_threshold_val(), var_to_correct_on_final(), batch_threshold_val(),exp_grp_val(), protein_val())
     
     annotation_data <- as.data.frame(sample_matrix[[2]])
     sample_matrix <- as.data.frame(sample_matrix[[1]])
@@ -2352,7 +2391,7 @@ server <- function(input, output, session) {
   })
   
   output$init_samps <- renderText({
-    init_samps <- paste("Initial number of samples was: ", ncol(sample_matrix()))
+    init_samps <- paste("Initial number of samples was: ", ncol(sample_matrix())-1)
     return(init_samps)
   })
   
@@ -2362,7 +2401,7 @@ server <- function(input, output, session) {
   })
   
   output$filt_samps <- renderText({
-    filt_samps <- paste("Number of samples remaining after filtering are: ", ncol(sample_matrix_filt()))
+    filt_samps <- paste("Number of samples remaining after filtering are: ", ncol(sample_matrix_filt())-1)
     return(filt_samps)
   })
   
@@ -2643,6 +2682,96 @@ server <- function(input, output, session) {
     p <- filtered_plot4_reac()
     print(p)
   })
+  
+  ## for take aways in results
+  # Make table with sample_matrix and annotation combined - filtered
+  joined_df2 <- reactive({
+    req(input$cols_of_int)
+    #req(input$unnorm_file, input$cols_of_int)
+    table2 <- sample_matrix_filt() %>%
+      select(everything()) %>%
+      summarise_all(funs(sum(is.na(.)))) %>%
+      rownames_to_column() %>%
+      pivot_longer(cols=-rowname)
+    
+    check_cols_of_interest <- unlist(strsplit(as.character(rv()), " "))
+    
+    joined_df <- merge(table2, annotation_data_filt(), by.x = "name", by.y = "FullRunName")
+    joined_df <- joined_df %>% 
+      select(check_cols_of_interest, exp_grp_val(), "name", "value")
+    
+    return(joined_df)
+  })
+  
+  output$missing_note_filt <- renderText({paste("Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) is ", sum(joined_df2()$value), "and the percent of missing data is ", round((sum(joined_df2()$value)/(nrow(sample_matrix_filt())*(ncol(sample_matrix_filt())-1)))*100, 2), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.")})
+  
+  init_table_reac2 <- reactive({
+    req(input$cols_of_int)
+    #req(input$cols_of_int, input$anno_file)
+    
+    technical_factors <- unlist(strsplit(as.character(rv()), " "))
+    init_table <- data.frame(matrix(ncol = 12, nrow=length(technical_factors)))
+    x <- c("Batch_column", "Total_num_of_plates", "Max_num_of_samples", "Min_num_of_samples", "Variation_in_sample_distribution", "Plates_passing_distri_cutoff_init", "Plates_passing_distri_cutoff", "Max_missing_by_plate", "Min_missing_by_plate", "Variation_in_missingness", "Plates_passing_missing_cutoff_init", "Plates_passing_missing_cutoff")
+    colnames(init_table) <- x
+    init_table_index = 0
+    
+    protein <- protein_val()
+    
+    for (i in technical_factors) {
+      init_table_index = init_table_index + 1  
+      
+      samps_table <- annotation_data_filt() %>% 
+        group_by("Group"=annotation_data_filt()[[i]]) %>% 
+        summarise(Sample_count = n()) %>%
+        mutate(Sample_percentage=100*Sample_count/sum(Sample_count))
+      
+      overlaps_for_init_table <- pivot_longer(sample_matrix_filt(), cols = c(everything(), -protein), names_to = "FullRunName", values_to = "Intensity") %>% 
+        left_join(annotation_data_filt(), by="FullRunName") %>% 
+        dplyr::rename("SampleName" = "FullRunName" , "Group" := !!i) %>% 
+        subset(select=c(protein,"Intensity","SampleName","Group")) %>%
+        group_by(Group) %>%
+        summarise(na_count = sum(is.na(Intensity)), not_na = sum(!is.na(Intensity))) %>%
+        mutate(total = na_count + not_na) %>%
+        mutate(perc_of_na = na_count/total*100) 
+      
+      overlaps_final <- merge(overlaps_for_init_table, samps_table)
+      
+      Batch_col <- toString(i)
+      Max_missing_by_plate <- overlaps_final %>% summarise(max(perc_of_na))
+      Min_missing_by_plate <- overlaps_final %>% summarise(min(perc_of_na))
+      Variation_in_missingness <- (Max_missing_by_plate - Min_missing_by_plate)/Max_missing_by_plate
+      Plates_passing_missing_cutoff <- overlaps_final %>% summarise(sum(perc_of_na < 50)) 
+      Total_num_of_plates <- nrow(overlaps_final)
+      Num_of_plates_passing_missing_cutoff <- paste0(Plates_passing_missing_cutoff, " out of ", Total_num_of_plates)
+      
+      Max_num_of_samples <- overlaps_final %>% summarise(max(Sample_count))
+      Min_num_of_samples <- overlaps_final %>% summarise(min(Sample_count))
+      Variation_in_sample_distribution <- (Max_num_of_samples - Min_num_of_samples)/Max_num_of_samples*100
+      Plates_passing_distri_cutoff <- overlaps_final %>% summarise(sum(Sample_count > 25)) 
+      Num_of_plates_passing_distri_cutoff <- paste0(Plates_passing_distri_cutoff, " out of ", Total_num_of_plates)
+      
+      row_to_add = c(Batch_col, Total_num_of_plates, Max_num_of_samples, Min_num_of_samples, Variation_in_sample_distribution, Plates_passing_distri_cutoff, Num_of_plates_passing_distri_cutoff, Max_missing_by_plate, Min_missing_by_plate, Variation_in_missingness, Plates_passing_missing_cutoff, Num_of_plates_passing_missing_cutoff)
+      
+      #init_table = rbind(init_table, row_to_add)
+      init_table[init_table_index,] <- row_to_add
+      #init_table[nrow(init_table)+1,] <- row_to_add
+    }
+    
+    init_table <- init_table %>% 
+      select(-Max_missing_by_plate, -Min_missing_by_plate, -Max_num_of_samples, -Min_num_of_samples, -Plates_passing_missing_cutoff_init, -Plates_passing_distri_cutoff_init, -Total_num_of_plates) %>%
+      mutate(Variation_in_missingness = round(Variation_in_missingness, 4)) %>%
+      mutate(Variation_in_sample_distribution = round(Variation_in_sample_distribution, 4))
+    
+    init_table$Variation_in_missingness <- paste0(init_table$Variation_in_missingness, " %")
+    init_table$Variation_in_sample_distribution <- paste0(init_table$Variation_in_sample_distribution, " %")
+    
+    return(init_table)
+  })
+  
+  output$init_table2 <- renderTable({
+    init_table_reac2()
+  })
+  
   
   ######### getting data for visualizing normalization
   combo_output2 <- reactive({
@@ -3629,7 +3758,11 @@ server <- function(input, output, session) {
         # one list() container object for all the parameters
         # all the objects have unique names (keys)
         if(input_provided(input$iRT_prot) && input_provided(input$samps_for_corr)) {
-          params <- list(input_plot1_reac = input_plot1_reac(),
+          params <- list(sample_matrix = sample_matrix(),
+                         sample_matrix_filt = sample_matrix_filt(),
+                         joined_df = joined_df(),
+                         joined_df2 = joined_df2(),
+                         input_plot1_reac = input_plot1_reac(),
                          balloon_plot_reac_report = balloon_plot_reac_report(),
                          pareto_plot_reac = pareto_plot_reac(),
                          missing_plots2_reac_report = missing_plots2_reac_report(),
@@ -3643,6 +3776,7 @@ server <- function(input, output, session) {
                          filtered_plot2_reac = filtered_plot2_reac(),
                          missing_plots2_reac_report2 = missing_plots2_reac_report2(),
                          filtered_plot4_reac  = filtered_plot4_reac(),
+                         init_table_reac2 = init_table_reac2(),
                          unnorm_box_reac = unnorm_box_reac(),
                          norm_box_reac = norm_box_reac(),
                          pvca_before_bc_reac = pvca_before_bc_reac2(),
@@ -3661,7 +3795,11 @@ server <- function(input, output, session) {
                          corr_after_across_bc_reac = corr_after_across_bc_reac(),
                          corr_after_bc_reac = corr_after_bc_reac())
         } else if(input_provided(input$iRT_prot)) {
-          params <- list(input_plot1_reac = input_plot1_reac(),
+          params <- list(sample_matrix = sample_matrix(),
+                         sample_matrix_filt = sample_matrix_filt(),
+                         joined_df = joined_df(),
+                         joined_df2 = joined_df2(),
+                         input_plot1_reac = input_plot1_reac(),
                          balloon_plot_reac_report = balloon_plot_reac_report(),
                          pareto_plot_reac = pareto_plot_reac(),
                          missing_plots2_reac_report = missing_plots2_reac_report(),
@@ -3675,6 +3813,7 @@ server <- function(input, output, session) {
                          filtered_plot2_reac = filtered_plot2_reac(),
                          missing_plots2_reac_report2 = missing_plots2_reac_report2(),
                          filtered_plot4_reac  = filtered_plot4_reac(),
+                         init_table_reac2 = init_table_reac2(),
                          unnorm_box_reac = unnorm_box_reac(),
                          norm_box_reac = norm_box_reac(),
                          pvca_before_bc_reac = pvca_before_bc_reac2(),
@@ -3690,7 +3829,11 @@ server <- function(input, output, session) {
                          irt_after_across_bc_reac = irt_after_across_bc_reac(),
                          irt_after_bc_reac = irt_after_bc_reac())
         } else if(input_provided(input$samps_for_corr)) {
-          params <- list(input_plot1_reac = input_plot1_reac(),
+          params <- list(sample_matrix = sample_matrix(),
+                         sample_matrix_filt = sample_matrix_filt(),
+                         joined_df = joined_df(),
+                         joined_df2 = joined_df2(),
+                         input_plot1_reac = input_plot1_reac(),
                          balloon_plot_reac_report = balloon_plot_reac_report(),
                          pareto_plot_reac = pareto_plot_reac(),
                          missing_plots2_reac_report = missing_plots2_reac_report(),
@@ -3704,6 +3847,7 @@ server <- function(input, output, session) {
                          filtered_plot2_reac = filtered_plot2_reac(),
                          missing_plots2_reac_report2 = missing_plots2_reac_report2(),
                          filtered_plot4_reac  = filtered_plot4_reac(),
+                         init_table_reac2 = init_table_reac2(),
                          unnorm_box_reac = unnorm_box_reac(),
                          norm_box_reac = norm_box_reac(),
                          pvca_before_bc_reac = pvca_before_bc_reac2(),
@@ -3719,7 +3863,11 @@ server <- function(input, output, session) {
                          corr_after_across_bc_reac = corr_after_across_bc_reac(),
                          corr_after_bc_reac = corr_after_bc_reac())
         } else {
-          params <- list(input_plot1_reac = input_plot1_reac(),
+          params <- list(sample_matrix = sample_matrix(),
+                         sample_matrix_filt = sample_matrix_filt(),
+                         joined_df = joined_df(),
+                         joined_df2 = joined_df2(),
+                         input_plot1_reac = input_plot1_reac(),
                          balloon_plot_reac_report = balloon_plot_reac_report(),
                          pareto_plot_reac = pareto_plot_reac(),
                          missing_plots2_reac_report = missing_plots2_reac_report(),
@@ -3733,6 +3881,7 @@ server <- function(input, output, session) {
                          filtered_plot2_reac = filtered_plot2_reac(),
                          missing_plots2_reac_report2 = missing_plots2_reac_report2(),
                          filtered_plot4_reac  = filtered_plot4_reac(),
+                         init_table_reac2 = init_table_reac2(),
                          unnorm_box_reac = unnorm_box_reac(),
                          norm_box_reac = norm_box_reac(),
                          pvca_before_bc_reac = pvca_before_bc_reac2(),

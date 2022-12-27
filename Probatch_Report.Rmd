@@ -1,0 +1,2365 @@
+---
+title: "Probatch Report"
+author: "ACBRI Bioinformatics Team"
+date: 'Report generated on `r format(Sys.time(), "%B %d, %Y")`'
+output:
+  html_document:
+    anchor_sections: false
+    toc: true
+    toc_depth: 3
+    toc_float:
+      collapsed: false
+    fig_width: 11
+    fig_height: 7
+    code_folding: "hide"
+    theme: united
+toc-title: "Table of Contents"
+params:
+  input_norm: x
+  input_unnorm: x
+  metadata_annotation: x
+  output_dir: x
+  outfile_prefix: x
+  batch_column: x
+  cols_of_interest: x
+  sample_threshold: x
+  expgroup_threshold: x
+  batch_threshold: x
+  samples_for_correlation: x
+  iRT_annotation: x
+  iRT_protein_name: x
+  imputation_method: x
+  quantile_norm: x
+  batch_correction_first: x
+  pdf_width: x
+  pdf_length: x
+editor_options:
+  chunk_output_type: console
+# Each section in the .Rmd file is generally created in three steps:
+# Important note regarding `cat` statements: R Markdown expects generous 
+# For future reference: closing tabsets requires declaring an empty header,
+---
+
+
+```{r setup, include=FALSE}
+# the setup chunk MUST be at the very first code chunk of the .Rmd document in order to execute on the HPC.
+knitr::opts_chunk$set(
+  echo = TRUE,
+  error = TRUE
+)
+```
+
+```{css zoom-lib-src, echo = FALSE}
+script src = "www/jquery3.4.1.min.js"
+```
+
+```{js zoom-jquery, echo = FALSE}
+// https://stackoverflow.com/questions/56361986/zoom-function-in-rmarkdown-html-plot
+ $(document).ready(function() {
+    $('body').prepend('<div class=\"zoomDiv\"><img src=\"\" class=\"zoomImg\"></div>');
+    // onClick function for all plots (img's)
+    $('img:not(.zoomImg)').click(function() {
+      $('.zoomImg').attr('src', $(this).attr('src')).css({height: '100%', width:'100%'});
+      $('.zoomDiv').css({opacity: '1', width: 'auto', border: '1px solid white', borderRadius: '5px', position: 'fixed', top: '50%', left: '50%', marginRight: '-50%', transform: 'translate(-50%, -50%)', boxShadow: '0px 0px 50px #888888', zIndex: '50', overflow: 'auto', maxHeight: '100%', maxWidth: '100%'});
+    });
+    // onClick function for zoomImg
+    $('img.zoomImg').click(function() {
+      $('.zoomDiv').css({opacity: '0', width: '0%'}); 
+    });
+  });
+```
+
+```{r Embed CS logo at top, echo=FALSE}
+htmltools::img(src = knitr::image_uri(file.path(getwd(), "www", "logo_desktop_large.png")), 
+               alt = 'logo', 
+               style = 'position:absolute; top:0; right:0; padding:20px; height:100px')
+```
+
+```{js Move the top-right CODE button, echo=FALSE}
+// https://stackoverflow.com/questions/43009788/insert-a-logo-in-upper-right-corner-of-r-markdown-html-document
+$(document).ready(function() {
+  $('#header').css('margin-right', '180px')
+});
+```
+
+---
+
+## Introduction
+Hello and welcome! We are pleased to be trusted with your data and present to you a visual summary of your dataset.
+
+Batch effect correction is the procedure of removing variability from your data that is not due to your variable of interest. Batch effects are due to technical differences between your samples, such as the type of instrument or even the technician that ran the sample.
+
+For any concerns about or suggestions to improve this report, let the team know at **GroupHeartBioinformaticsSupport@cshs.org**, and we will consider your feedback. We are happy to support your computational needs.
+
+
+```{r Load R Libraries, include=FALSE}
+.libPaths( c("/hpc/home/sundararamn/R/x86_64-pc-linux-gnu-library/3.6" , .libPaths() ) )
+#.libPaths( c("/hpc/home/svc-optrahpcportal/R/x86_64-pc-linux-gnu-library/3.6" , .libPaths() ) )
+
+suppressPackageStartupMessages({
+  library(optparse)
+  library(dplyr)
+  library(tibble)
+  library(ggplot2)
+  library(assertthat)
+  library(readr)
+  #library(purrr)
+  library(tidyverse)
+  library(ggpubr)
+  library(RColorBrewer)
+  #library(patchwork)
+  library(DEP)
+  library(proBatch)
+  library(ggpubr)
+  library(gtable)
+  library(grid)
+  library(gridExtra)
+  library(sqldf)
+  library(pcaMethods)
+  library(ComplexHeatmap)
+  library(SummarizedExperiment)
+  library(tools)
+  library(missRanger)
+  library(doParallel)
+  library(iheatmapr)
+})
+
+```
+
+
+```{r Define functions, include=T}
+# ------------------- Functions -----------------------
+#Validation on header names
+check_headers <- function(df, annotation, df_cols, annotation_cols){
+  
+  print("Checking for headers in input dataframe with sample values")
+  for (x in df_cols){
+    if(x %in% colnames(df)) { 
+      cat(sprintf("%s column exists in input dataframe \n", x ))
+    } else {
+      stop(cat(sprintf("%s column DOES NOT EXIST in input dataframe \n", x )))
+      }
+  }
+  
+  print("Checking for headers for annotation dataframe")
+  for (y in annotation_cols){
+    if(y %in% colnames(annotation)) { 
+      cat(sprintf("%s column exists in input dataframe \n", y ))
+    } else {
+      stop(cat(sprintf("%s column DOES NOT EXIST in input dataframe \n", y )))
+    }
+  }
+}
+
+# rename_level3, check_headers, filter_values, protein_concat, order_samples
+#rename Level3 in annotation.txt to FullRunName
+#NOTE: Needs to be called before filter_values function
+rename_level3 <- function(annotation){
+  names(annotation)[names(annotation) == "Level3"] <- "FullRunName"
+  return(annotation)
+}
+
+#Concatenate protein, peptide and fragment into a single column called "Protein" in input file
+#NOTE: Needs to be called after the filter_values function
+protein_concat <- function(df){
+  df$Protein <- paste(df$ProteinName, df$PeptideSequence, df$FragmentIon, sep="-")
+  df = df[ , !(names(df) %in% c('ProteinName','PeptideSequence','FragmentIon','RT'))]
+  df <- df %>% select(Protein, everything()) #makes the protein column the first column
+  return(df)
+}
+
+#FullRunName in annotation file must be in the same order as input data
+order_samples <- function(df, annotation){
+  df = df[ , !(names(df) %in% c('ProteinName','PeptideSequence','FragmentIon','RT','Protein'))]
+  sample_order = colnames(df)
+  annotation <- annotation %>% arrange(factor(FullRunName, levels = sample_order))
+  return(annotation)
+}
+
+#Replace hyphens in colnames with underscore
+colClean <- function(x){ 
+  colnames(x) <- gsub("-", "_", colnames(x))
+  colnames(x) <- gsub("\\.", "_", colnames(x))
+  return(x)  
+} 
+
+# Replace hyphens in Level3 of annotation with underscore
+colClean2 <- function(x){ 
+levels(x$Level3) <- gsub("-", "_", levels(x$Level3))
+levels(x$Level3) <- gsub("\\.", "_", levels(x$Level3))
+return(x)
+}
+
+# Remove fragments that have only 0 or 1 intensitites in that batch
+minimal_filtering <- function(df, annotation, group_by) {
+  # Remove samples that are singletons, i.e., 1 sample in a plate
+  # get those plates
+  plates_with_1_sample <- annotation %>%
+  dplyr::count(across(group_by)) %>%
+  dplyr::filter(n <= 1)
+  
+  # convert plates to list
+  plates_with_1_sample_list <- as.vector(plates_with_1_sample[[group_by]])
+
+  # get corresponding sample names
+  samples_to_remove <- annotation[annotation[[group_by]] %in% plates_with_1_sample_list,] %>%
+  dplyr::select(FullRunName)
+  
+  # convert to list
+  samples_to_remove_list <- as.vector(samples_to_remove$FullRunName)
+
+  # drop columns based on names from the original dataframe 
+  df = dplyr::select(df, -all_of(samples_to_remove_list))
+  
+  # remove rows from copy of annotation as well
+  annotation = annotation[!(annotation$FullRunName %in% samples_to_remove_list),] %>% droplevels()
+  row.names(annotation) <- NULL 
+  
+  # continue with min filt of fragments
+  results_matrix <- df
+  results_matrix[is.na(results_matrix)] = 0
+  
+  overlaps <- pivot_longer(results_matrix, cols = c(everything(), -Protein), names_to = "FullRunName", values_to = "Intensity") %>% 
+    left_join(annotation_data, by="FullRunName") %>% 
+		dplyr::rename("SampleName" = "FullRunName" , "Group" := !!group_by ) %>% 
+		subset(select=c("Protein","Intensity","SampleName","Group"))
+  
+  missval <- overlaps %>%
+  mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+  dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+  summarise(Intensity = sum(Intensity)) %>% 
+  mutate(check = ifelse(Intensity < 2, 0, 1)) %>% 
+  group_by(Protein) %>% 
+  filter(any(check == 0)) %>%
+  summarise(Intensity = sum(Intensity))
+
+  # missval now contains only those proteins/fragments that need to be removed because they have batches with < 2 intensities in them
+  rownames(missval) <- missval$Protein
+  frags_to_remove = row.names(missval)
+  # removing from matrix if missval contains the fragment
+  df = df[!(df$Protein %in% frags_to_remove),]
+
+  #return(sample_matrix)
+  #return(list("sample_mat" = df, "anno" = annotation))
+  list_dfs <- list(df, annotation)
+  return(list_dfs)
+}
+
+filter_samples <- function(df, annotation, sample_missingness, expgroup_missingness, batch_type, batch_missingness) {
+  
+  #sprintf("Initial samples = %i, fragments = %i", nrow(annotation), nrow(df))
+  
+  print("Initial samples:")
+  print(nrow(annotation))
+  print("Initial fragemnts:")
+  print(nrow(df))
+  print("\n")
+  
+  ####### A #######
+  samples <- list(annotation$FullRunName) 
+  samples = unlist(samples, use.names=FALSE)
+  
+  sam_remove = df[ lapply( df, function(x) sum(is.na(x)) / length(x) ) >= sample_missingness ]
+  samples_to_remove = names(sam_remove)
+  
+  # drop columns based on names from the original dataframe 
+  fil_df = dplyr::select(df, -samples_to_remove)
+  
+  # remove rows from copy of annotation as well
+  annotation = annotation[!(annotation$FullRunName %in% samples_to_remove),] %>% droplevels()
+  row.names(annotation) <- NULL 
+  
+  ##### LOGGING ######
+
+  #sprintf("Drops from a) = %i samples, Remaining = %i samples, %i fragments", length(samples_to_remove), nrow(annotation), nrow(fil_df))
+  
+  print("Drops from a)")
+  print("Samples dropped: ")
+  print(length(samples_to_remove))
+  print("Remaining Samples:")
+  print(nrow(annotation))
+  print("Remaining Fragments:")
+  print(nrow(fil_df))
+  print("\n")
+  
+  ####### B #######
+  
+  overlaps2 <- call_missing_vals(fil_df, annotation, "attribute_ExperimentalGroup")
+  
+  annot_group <- overlaps2 %>% 
+    dplyr::distinct(SampleName, Group) %>%
+	group_by(Group) %>% 
+	mutate(count = n()) %>%
+	dplyr::select(-SampleName) %>%
+	dplyr::distinct(Group, count) 
+  
+  # Get counts of each exp group per fragment
+  missval <- overlaps2 %>%
+    mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+    dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+    summarise(Intensity = sum(Intensity)) %>% 
+    left_join(annot_group, by="Group") %>% 
+    mutate(status = 1-(Intensity/count)) %>%
+	dplyr::select(Protein,status) %>%
+    mutate(check = ifelse(status <= expgroup_missingness, 1, 0)) %>%
+	group_by(Protein) %>% 
+    summarise(check = sum(check))
+
+  dropped = length(which(missval$check==0))
+  
+  rownames(missval) <- missval$Protein
+  frags_to_keep_c = row.names(missval)[which(missval$check!=0)]
+  fil_df = fil_df[(fil_df$Protein %in% frags_to_keep_c),]
+  
+  ##### LOGGING ######
+  
+  #sprintf("Drops from b) = %i fragments, Remaining = %i samples, %i fragments", dropped, nrow(annotation), nrow(fil_df))
+  
+  print("Drops from b)")
+  print("Fragments dropped: ")
+  print(dropped)
+  print("Remaining Samples:")
+  print(nrow(annotation))
+  print("Remaining Fragments:")
+  print(nrow(fil_df))
+  print("\n")
+  
+  ####### C #######
+  overlaps <- call_missing_vals(fil_df, annotation, batch_type)
+  
+  annot_group <- overlaps %>% 
+    dplyr::distinct(SampleName, Group) %>%
+	group_by(Group) %>% 
+	mutate(count = n()) %>%
+	dplyr::select(-SampleName) %>%
+	dplyr::distinct(Group, count)
+  
+  missval <- overlaps %>%
+    mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+    dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+    summarise(Intensity = sum(Intensity)) %>% 
+    left_join(annot_group, by="Group") %>% 
+    mutate(status = 1-(Intensity/count)) %>%
+	dplyr::select(Protein,status) %>%
+    mutate(check = ifelse(status <= batch_missingness, 0, 1)) %>%
+	group_by(Protein) %>% 
+    summarise(check = sum(check))
+
+  dropped = length(which(missval$check!=0))
+  
+  rownames(missval) <- missval$Protein
+  frags_to_keep_c = row.names(missval)[which(missval$check==0)]
+  fil_df = fil_df[(fil_df$Protein %in% frags_to_keep_c),]
+  
+  ##### LOGGING ######
+  
+  print("Drops from c)")
+  print("Fragments dropped: ")
+  print(dropped)
+  print("Remaining Samples:")
+  print(nrow(annotation))
+  print("Remaining Fragments:")
+  print(nrow(fil_df))
+  print("\n")
+  
+  list_dfs <- list(fil_df, annotation)
+  return(list_dfs)
+}
+
+call_missing_vals <- function(sample_matrix, annotation_data, group_by) {
+  results_matrix <- sample_matrix
+  results_matrix[is.na(results_matrix)] = 0
+  #results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  #colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  #results_matrix$Protein <- paste(results_matrix$ProteinName, results_matrix$PeptideSequence, results_matrix$FragmentIon, sep="-")
+  #results_matrix = results_matrix[ , !(names(results_matrix) %in% c('ProteinName','PeptideSequence','FragmentIon'))]
+  #results_matrix <- results_matrix %>% select(Protein, everything()) #makes the protein column the first column
+  
+  overlaps <- pivot_longer(results_matrix, cols = c(everything(), -Protein), names_to = "FullRunName", values_to = "Intensity") %>% 
+            left_join(annotation_data, by="FullRunName") %>% 
+			dplyr::rename("SampleName" = "FullRunName" , "Group" := !!group_by ) %>% 
+			subset(select=c("Protein","Intensity","SampleName","Group"))
+  return(overlaps)
+}
+
+plot_pareto <- function(overlaps) {
+  # Get percent missingness per fragment
+  missval <- overlaps %>%
+    mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+    group_by(Protein) %>%
+	summarize(count = n()-sum(Intensity), percent = (1-(sum(Intensity)/n()))*100)
+  
+  # Bin missingness and get frequency and cumulative frequency
+  percent_miss <- missval$percent
+  bins <- seq(0,100,by=10)
+  scores <- cut(percent_miss,bins,include.lowest=TRUE)
+  freq_table <- transform(table(scores))
+  cum_table <- transform(freq_table,Cum_Freq=cumsum(Freq))
+  
+  # Make pareto plot
+  scaleRight <- tail(cum_table$Cum_Freq, n=1)/head(cum_table$Freq, n=1)
+  
+  ggplot(cum_table, aes(x=cum_table$score)) +
+    geom_bar(aes(y=cum_table$Freq), fill='blue', stat="identity") +
+    geom_point(aes(y=cum_table$Cum_Freq), color = rgb(0, 1, 0), pch=16, size=1) +
+    geom_path(aes(y=cum_table$Cum_Freq, group=1), colour="red", lty=3, size=1) +
+	scale_y_continuous(name = "Fragment missingness count", sec.axis = sec_axis(~./ max(cum_table$Cum_Freq), labels = scales::percent, name="Fragment missingness percentage")) +
+    theme(text = element_text(size=14, face="bold"), axis.text.x = element_text(angle=90, vjust=0.5, hjust = 0.5, size = 10)) +
+    labs(title = "Missingness Distribution", x = 'Missingness distribution range', y ='Fragment missingness count', size = 12, face = "bold", vjust=0.5, hjust = 0.5)
+}
+
+plot_missgroup <- function(overlaps, expgrp_threshold) {
+  require(tidyverse)
+  require(ggpubr)
+  
+  # Get total counts for each exp group
+  annot_group <- overlaps %>% 
+    dplyr::distinct(SampleName, Group) %>%
+	group_by(Group) %>% 
+	mutate(count = n()) %>%
+	dplyr::select(-SampleName) %>%
+	dplyr::distinct(Group, count) 
+  
+  # Get counts of each exp group per fragment
+  missval <- overlaps %>%
+    mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+    dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+    summarise(Intensity = sum(Intensity)) %>% 
+    left_join(annot_group, by="Group") %>% 
+    mutate(status = 1-(Intensity/count)) %>%
+	dplyr::select(Protein,status) %>%
+	group_by(Protein) %>%
+    mutate(status = ifelse(all(status > expgrp_threshold), "Threshold failed", "Threshold passed")) %>%
+	dplyr::distinct(Protein,status) %>%
+	dplyr::select(-Protein) %>%
+	group_by(status) %>% 
+	mutate(count = n()/nrow(.)) %>% 
+	dplyr::distinct(status,count)
+  
+  ggplot(missval, aes(x = "Group", y = count, fill = status, label = status)) +
+  geom_bar(stat = "identity") +
+  labs(x = NULL, y = "% Fragments") +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+  theme(text = element_text(size=14, face="bold"), axis.text.x = element_text(angle=90, vjust=0.5, hjust = 0.5, size = 14)) +
+  ggtitle("Group Missingness") 
+}
+
+plot_missbatch <- function(overlaps, batch_threshold) {
+  require(tidyverse)
+  require(ggpubr)
+  
+  # Get total counts for each exp group
+  annot_group <- overlaps %>% 
+    dplyr::distinct(SampleName, Group) %>%
+	group_by(Group) %>% 
+	mutate(count = n()) %>%
+	dplyr::select(-SampleName) %>%
+	dplyr::distinct(Group, count) 
+  
+  # Get counts of each exp group per fragment
+  missval <- overlaps %>%
+    mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+    dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+    summarise(Intensity = sum(Intensity)) %>% 
+    left_join(annot_group, by="Group") %>% 
+    mutate(status = 1-(Intensity/count)) %>%
+	dplyr::select(Group,status) %>%
+	#group_by(Protein) %>%
+    mutate(status = ifelse((status > batch_threshold), "Threshold failed", "Threshold passed")) %>%
+	#dplyr::distinct(Protein,status) %>%
+	dplyr::select(-Protein) %>%
+	group_by(Group,status) %>% 
+	mutate(count = n()) %>% 
+	dplyr::distinct(status,count) %>% 
+	group_by(Group) %>%
+	mutate(percent = count/sum(count)*100) %>%
+	ungroup() %>%
+	dplyr::select(-count)
+  
+  # Get cumulative counts 
+  cumulative <- overlaps %>%
+    mutate(Intensity = ifelse(Intensity > 0, 1, 0)) %>% 
+	dplyr::arrange(Group) %>%
+    dplyr::select(-SampleName) %>%
+	group_by(Protein, Group) %>% 
+    summarise(Intensity = sum(Intensity)) %>% 
+    left_join(annot_group, by="Group") %>% 
+    mutate(status = 1-(Intensity/count)) %>%
+	dplyr::select(Protein,status) %>%
+	group_by(Protein) %>%
+    mutate(status = ifelse(any(status > batch_threshold), "Threshold failed", "Threshold passed")) %>%
+	dplyr::distinct(Protein,status) %>%
+	dplyr::select(-Protein) %>%
+	group_by(status) %>% 
+	mutate(percent = n()/nrow(.)*100) %>% 
+	dplyr::distinct(status,percent)
+  
+  cumulative <- data.frame(append(cumulative, c(Group='Total'), after=1))
+  
+  missval = bind_rows(missval, cumulative)
+  
+  ggplot(missval, aes(x = Group, y = percent, fill = status, label = percent)) +
+  geom_bar(stat = "identity") +
+  labs(x = "Batch", y = "% Fragments") +
+  theme(plot.title = element_text(hjust = 0.5, size = 14, face = "bold")) +
+  theme(text = element_text(size=12, face="bold"), axis.text.x = element_text(angle=90, vjust=0.5, hjust = 0.5, size = 10)) +
+  ggtitle("Batch Missingness")
+
+}
+
+plot_per_sample <- function(overlaps, color_list, batch_col) {
+  require(tidyverse)
+  require(ggpubr)
+  require(RColorBrewer)
+  
+  colors <- color_list[[batch_col]]
+  colors_df <- as.data.frame(colors)
+  colors_df <- colors_df %>%
+    rownames_to_column()
+  
+  n_groups <- length(unique(overlaps$Group))
+  GROUP_COLORS <- as.vector(colors_df$colors)
+  names(GROUP_COLORS) <- unique(colors_df$rowname)
+  
+  stat2 <- overlaps %>% group_by(SampleName, Group) %>%
+    mutate(Intensity = ifelse(Intensity > 0, TRUE, FALSE)) %>% 
+    dplyr::summarize(n = n(), sum = (n()-sum(Intensity))/n()*100, .groups = "drop")
+  
+  ggplot(stat2, aes(x = SampleName, y = sum, fill = Group)) +
+    geom_col() +
+    geom_hline(aes(yintercept = SAMPLE_NA_CUTOFF*100), colour="#990000", linetype="dashed") + 
+    scale_fill_manual(values = GROUP_COLORS) +
+    labs(title = "Sample Missingness", x = "Sample Name",
+         y = "% Missingness") +
+    theme_classic2() +
+    theme(plot.title = element_text(size=14,face="bold"),
+          axis.text.x = element_text(size=FONTSIZE_sample_axis,face="bold", vjust=0.5,angle=90)) +
+    coord_cartesian(ylim = c(0, 100))
+}
+
+plot_missval <- function(overlaps, color_list, BATCH_COL) {
+  require(tidyverse)
+  require(ComplexHeatmap)
+  require(RColorBrewer)
+  
+  colors <- color_list[[BATCH_COL]]
+  colors_df <- as.data.frame(colors)
+  colors_df <- colors_df %>%
+    rownames_to_column()
+  
+  n_groups <- length(unique(overlaps$Group))
+  GROUP_COLORS <- as.vector(colors_df$colors)
+  names(GROUP_COLORS) <- unique(colors_df$rowname)
+  
+  annot_group <- overlaps %>% 
+    dplyr::distinct(SampleName, Group) %>% 
+    dplyr::arrange(Group) %>% 
+    dplyr::pull(Group)
+  
+  missval <- overlaps %>%
+    group_by(Protein) %>%
+    mutate(Intensity = ifelse(Intensity > 0, TRUE, FALSE)) %>% 
+    dplyr::filter(any(Intensity == F)) %>%
+	dplyr::arrange(Group) %>%
+    dplyr::select(-Group) %>%
+    dplyr::mutate(Intensity = if_else(Intensity, 1, 0)) %>%
+    pivot_wider(names_from = SampleName, values_from = Intensity) %>%
+    column_to_rownames("Protein") %>%
+    as.matrix()
+  
+  # missval[,order(colnames(missval))]
+  Heatmap(
+    missval,
+    col = c("#FFFFFF", "#000000"),
+    show_row_names = FALSE,
+    show_column_names = TRUE,
+    row_title = "Fragments missing\nfrom at least one sample",
+    column_title = paste0("Missing Fragments Pattern: ", BATCH_COL),
+    row_title_gp = gpar(fontsize = 14, fontface = "bold"),
+    column_title_gp = gpar(fontsize = 14, fontface = "bold"),
+    column_names_centered = FALSE,
+    column_names_gp = gpar(fontsize = FONTSIZE_sample_axis),
+    
+    name = "Legend",
+    heatmap_legend_param = list(labels = c("Missing", "Observed")),
+    cluster_rows = F,
+    cluster_columns = F,
+    bottom_annotation = HeatmapAnnotation(
+      Group = annot_group,
+      col = list(Group = GROUP_COLORS)
+    )
+  )
+}
+
+plot_density <- function(sample_matrix, annotation_data) {
+  dep_df.1 <- cbind(name = rownames(sample_matrix), ID = rownames(sample_matrix), sample_matrix)
+  
+  dep_design.1 <- data.frame(label = as.character(annotation_data$FullRunName), condition = as.character(annotation_data$Level2), replicate = as.character(annotation_data$attribute_TechnicalGroup), stringsAsFactors=FALSE)
+  
+  cols <- 4:ncol(dep_df.1)
+  dep_se.1 <- make_se(dep_df.1, cols, dep_design.1)
+  plot_detect(dep_se.1) 
+}
+
+# split data to impute parellely on multiple files
+split_input_data <- function(sample_matrix_prov, split_name, OUTPUT_DIR, OUTFILE_PREFIX) {
+  chunks <- as.integer(round(nrow(sample_matrix_prov)/2))
+  index <- 0
+  sample_matrix_colnames <- colnames(sample_matrix_prov)
+
+  ### shuffle the data and split for imputing in parallel
+  sample_matrix_prov = sample_matrix_prov[sample(1:nrow(sample_matrix_prov)), ]
+
+  ### Make sure there are atleast 90000 fragments in data file, to keep a minimum of 45k fragments per subset
+  if (nrow(sample_matrix_prov) <= 90000) {
+    write.table(sample_matrix_prov, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_", split_name, "_1.tsv")), sep="\t", row.names=F, quote=F, col.names=sample_matrix_colnames)
+  }
+  ### else split the data and write separate files 
+  else {
+    split_vec <- seq(1, nrow(sample_matrix_prov), chunks)
+    #print(split_vec)
+
+    for (split_cut in split_vec) {
+      index <- index + 1
+      #print(split_cut)
+      #print(split_cut:(split_cut+(chunks-1)))
+      sample <- sample_matrix_prov[split_cut:(split_cut+(chunks-1)),]
+      sample <- sample %>% drop_na(Protein)
+
+      #print(sample)
+      write.table(sample, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_", split_name, "_", index, ".tsv")), sep="\t", row.names=F, quote=F, col.names=sample_matrix_colnames)
+
+      if (nrow(sample) != chunks){
+        print('Processed all files!')
+        break
+      }
+    }
+  }
+}
+
+# impute
+nafunctions <- function(sample_matrix, method) {
+  df <- df1 <- as.data.frame(sample_matrix)
+  method <- tolower(method)
+  if (method == "zero") {
+    df[is.na(df)] <- 0
+  }
+  else if (method == "minimum") {
+    df[is.na(df)] <- min(df1, na.rm = TRUE)
+  }
+  else if(method=="halfminimum"){
+    for(i in 1:nrow(df)) {
+      df[i,which(is.na(df[i,]))] <- min(df[i,], na.rm = T) / 2
+    }
+  }
+  else if (method == "colmedian") {
+    require(e1071)
+    df <- impute(df1, what = "median")
+  }
+  else if (method == "rowmedian") {
+    require(e1071)
+    dfx <- impute(t(df1), what = "median")
+    df <- t(dfx)
+  }
+  else if (method == "knnmethod") {
+    require(impute)
+    data_zero1 <-
+      impute.knn(as.matrix(df1),
+                 k = 10,
+                 rowmax = 1,
+                 colmax = 1)#rowmax = 0.9, colmax = 0.9
+    df <- data_zero1$data
+  }
+  else if (method == "seqknn") {
+    require(SeqKnn)
+    df <- SeqKNN(df1, k = 10)
+  }
+  else if (method == "bpca") {
+    require(pcaMethods)
+    data_zero1 <-
+      pcaMethods::pca(
+        as.matrix(df1),
+        nPcs = ncol(df1) - 1,
+        method = "bpca",
+        maxSteps = 100
+      )
+    df <- completeObs(data_zero1)
+  }
+  else if (method == "svdmethod") {
+    require(pcaMethods)
+    data_zero1 <-
+      pcaMethods::pca(as.matrix(df1),
+                      nPcs = ncol(df1) - 1,
+                      method = "svdImpute")
+    df <- completeObs(data_zero1)
+  }
+  else if (method == "lls") {
+    require(pcaMethods)
+    data_zero1 <- llsImpute(t(df1), k = 10)
+    df <- t(completeObs(data_zero1))
+  }
+  else if (method == "mle") {
+    require(norm)
+    xxm <- as.matrix(df1)
+    ss <- norm::prelim.norm(xxm)
+    thx <- norm::em.norm(ss)
+    norm::rngseed(123)
+    df <- norm::imp.norm(ss, thx, xxm)
+  }
+  else if (method == "qrilc") {
+    require(imputeLCMD)
+    xxm <- t(df1)
+    data_zero1 <- imputeLCMD::impute.QRILC(xxm, tune.sigma = 1)[[1]]
+    df <- t(data_zero1)
+  }
+  else if (method == "mindet") {
+    require(imputeLCMD)
+    xxm <- as.matrix(df1)
+    df <- imputeLCMD::impute.MinDet(xxm, q = 0.01)
+  }
+  else if (method == "minprob") {
+    require(imputeLCMD)
+    xxm <- as.matrix(df1)
+    df <- imputeLCMD::impute.MinProb(xxm, q = 0.01, tune.sigma = 1)
+  }
+  else if (method == "impseq") {
+    require(rrcovNA)
+    df <- impSeq(df1)
+  }
+  else if (method == "impseqrob") {
+    require(rrcovNA)
+    data_zero1 <- impSeqRob(df1, alpha = 0.9)
+    df <- data_zero1$x
+  }
+  else if (method == "mice-norm") {
+    require(mice)
+    minum <- 5
+    datareadmi <- mice(df1,
+                       m = minum,
+                       seed = 1234,
+                       method = "norm")
+    newdatareadmi <- 0
+    for (i in 1:minum) {
+      newdatareadmi <- complete(datareadmi, action = i) + newdatareadmi
+    }
+    df <- newdatareadmi / minum
+    rownames(df) <- rownames(df1)
+  }
+  else if (method == "mice-cart") {
+    require(mice)
+    minum <- 5
+    datareadmi <- mice(df1,
+                       m = minum,
+                       seed = 1234,
+                       method = "cart")
+    newdatareadmi <- 0
+    for (i in 1:minum) {
+      newdatareadmi <- complete(datareadmi, action = i) + newdatareadmi
+    }
+    df <- newdatareadmi / minum
+    rownames(df) <- rownames(df1)
+  }
+  else if (method == "trknn") {
+    source('Trunc_KNN/Imput_funcs.r')
+    sim_trKNN_wrapper <- function(data) {
+      result <-
+        data %>% as.matrix %>% t %>% imputeKNN(.,
+                                               k = 10,
+                                               distance = 'truncation',
+                                               perc = 0) %>% t
+      return(result)
+    }
+    df1x <- sim_trKNN_wrapper(t(df1))
+    df <- as.data.frame(t(df1x))
+  }
+  else if (method == "rf") {
+    require(missForest)
+    #data_zero1 <- missForest(t(df1), maxiter =10,ntree = input$rfntrees,mtry=floor(nrow(df1)^(1/3)),verbose = TRUE)
+    data_zero1 <-
+      missForest(
+        t(df1),
+        maxiter = 10,
+        ntree = 4,
+        mtry = floor(nrow(df1) ^ (1 / 3)),
+        verbose = TRUE
+      )
+    df <- t(data_zero1$ximp)
+  }
+  
+  else if (method == "ranger") {
+    df <- missRanger(df1, pmm.k = 3, splitrule = "extratrees", num.trees = 10, sample.fraction = 0.1, maxiter=10, seed=347)
+  }
+  
+  else if (method == "pi") {
+    #width <- input$piwidth
+    #downshift <- input$pidownshift
+    width <- 3
+    downshift <- 4
+    for (i in 1:ncol(df1)) {
+      temp <- df1[[i]]
+      if (sum(is.na(temp)) > 0) {
+        temp.sd <- width * sd(temp[!is.na(temp)], na.rm = TRUE)
+        temp.mean <-
+          mean(temp[!is.na(temp)], na.rm = TRUE) - downshift * sd(temp[!is.na(temp)], na.rm = TRUE)
+        n.missing <- sum(is.na(temp))
+        temp[is.na(temp)] <-
+          rnorm(n.missing, mean = temp.mean, sd = temp.sd)
+        df[[i]] <- temp
+      }
+    }
+    df
+  }
+  else if (method == "grr") {
+    require(DreamAI)
+    df <-
+      impute.RegImpute(
+        data = as.matrix(df1),
+        fillmethod = "row_mean",
+        maxiter_RegImpute = 10,
+        conv_nrmse = 1e-03
+      )
+  }
+  else if (method == "gms") {
+    require(GMSimpute)
+    df <- GMS.Lasso(df1,
+                    nfolds = 3,
+                    log.scale = FALSE,
+                    TS.Lasso = TRUE)
+  }
+  else{
+    stop("Unspported methods so far~~")
+  }
+  df <- as.data.frame(df)
+  df
+}
+
+cv_violinplot <- function(before, after, annotation, batch_type){
+  #This function calls the cv_violin function based on batch_type and returns a list of plots
+  
+  if(batch_type=="DR:Digestion_batch,TR:MS_batch"){
+    ms_plot = cv_violin(before, after, annotation,"MS_batch","TechReps")
+    digestion_plot = cv_violin(before, after, annotation, "Digestion_batch","DigReps")
+    plot_list = list(ms_plot, digestion_plot)
+    return(plot_list)
+  } else if(batch_type=="DR:Digestion_batch"){
+    final_plot = cv_violin(before, after, annotation, "Digestion_batch","DigReps")
+    return(list(final_plot))
+  } else if(batch_type=="TR:MS_batch"){
+    final_plot = cv_violin(before, after, annotation,"MS_batch","TechReps")
+    return(list(final_plot))
+  } else {
+    stop("Invalid batchtype entered.")
+  }
+}
+
+cv_violin <- function(before, after, annotation, batch_type, reps){
+  #This function calculates CV across and within each technical group and plots 2 violin plots 
+  
+  #getting samples to plot order based on batch_type 
+  if (batch_type == "MS_batch"){
+    sample_order <- annotation %>% arrange(attribute_ExperimentalGroup, MS_batch) %>% pull(!!sym('FullRunName'))
+    tech_reps <- c("TechRep")
+    samples_to_plot <- annotation %>%
+      filter(attribute_ExperimentalGroup %in% tech_reps) %>%
+      arrange(attribute_ExperimentalGroup, MS_batch) %>%
+      pull(!!sym('FullRunName'))
+    
+  } else if(batch_type == "Digestion_batch"){
+    sample_order <- annotation %>% arrange(attribute_ExperimentalGroup, Digestion_batch) %>% pull(!!sym('FullRunName'))
+    tech_reps <- c("DigRep")
+    samples_to_plot <- annotation %>%
+      filter(attribute_ExperimentalGroup %in% tech_reps) %>%
+      arrange(attribute_ExperimentalGroup, Digestion_batch) %>%
+      pull(!!sym('FullRunName'))
+  }
+  
+  techreps_to_plot = as.character(samples_to_plot)
+  
+  sample_data = subset(before, select=techreps_to_plot)
+  after_data = subset(after, select=techreps_to_plot)
+  
+  #keeping only samples that will be plotted in the annotation dataframe
+  annotation = annotation[(annotation$FullRunName %in% techreps_to_plot),]
+  annotation <- annotation %>% arrange(factor(FullRunName, levels = samples_to_plot))
+  
+  #before_cv = subset(before, select=Protein)
+  #after_cv = subset(after, select=Protein)
+  before_cv = before
+  after_cv = after
+  
+  #calculating CV across all samples
+  sample_data$across = rowCVs(sample_data)
+  after_data$across = rowCVs(after_data)
+  before_cv$across = rowCVs(sample_data)
+  after_cv$across = rowCVs(after_data)
+  
+  #calculating CV per technical group
+  
+  #getting samples under each technical group
+  labels = as.character(unique(annotation$attribute_TechnicalGroup))
+  name_data = subset(annotation, select=c("attribute_TechnicalGroup","FullRunName"))
+  
+  for(label in labels){
+    name_subset <- name_data[name_data$attribute_TechnicalGroup == label,]
+    samples = as.character(name_subset$FullRunName)
+    sample_subset <- subset(sample_data, select=samples)
+    sample_data[, label] = rowCVs(sample_subset)
+    before_cv[, label] = rowCVs(sample_subset)
+    after_subset <- subset(after_data, select=samples)
+    after_data[, label] = rowCVs(after_subset)
+    after_cv[, label] = rowCVs(after_subset)
+  }
+  
+  before_final <- melt(before_cv, id.vars=c('Protein'),var='TechnicalGroup')
+  colnames(before_final)[which(names(before_final) == "value")] <- "Before"
+  after_final <- melt(after_cv, id.vars=c('Protein'),var='TechnicalGroup')
+  colnames(after_final)[which(names(after_final) == "value")] <- "After"
+  
+  #getting scale for plots
+  
+  min_value = 0
+  max_value = max(max(before_final$Before),max(after_final$After))
+  
+  #violin plot
+  tech_groups <- factor(before_final$TechnicalGroup)
+  
+  before_plot <- ggplot(before_final, aes(x = TechnicalGroup, y = Before, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) +
+    ggtitle(paste0("CV Violin Plot - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "Before Correction",
+         fill = "TechnicalGroup")
+  
+  after_plot <- ggplot(after_final, aes(x = TechnicalGroup, y = After, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) + 
+    ggtitle(paste0("CV Violin Plot - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "After Correction",
+         fill = "TechnicalGroup")
+  
+  final_plot = plot_grid(before_plot, after_plot, align="h", scale=1)
+  
+}
+
+cv_violinplot <- function(before, after, annotation, batch_type){
+  #This function calls the cv_violin function based on batch_type and returns a list of plots
+  
+  if(batch_type=="DR:Digestion_batch,TR:MS_batch"){
+    ms_plot = cv_violin(before, after, annotation,"MS_batch","TechReps")
+    digestion_plot = cv_violin(before, after, annotation, "Digestion_batch","DigReps")
+    plot_list = list(ms_plot, digestion_plot)
+    return(plot_list)
+  } else if(batch_type=="DR:Digestion_batch"){
+    final_plot = cv_violin(before, after, annotation, "Digestion_batch","DigReps")
+    return(list(final_plot))
+  } else if(batch_type=="TR:MS_batch"){
+    final_plot = cv_violin(before, after, annotation,"MS_batch","TechReps")
+    return(list(final_plot))
+  } else {
+    stop("Invalid batchtype entered.")
+  }
+}
+
+cv_violin <- function(before, after, annotation, batch_type, reps){
+  #This function calculates CV across and within each technical group and plots 2 violin plots 
+  
+  #getting samples to plot order based on batch_type 
+  if (batch_type == "MS_batch"){
+    sample_order <- annotation %>% arrange(attribute_ExperimentalGroup, MS_batch) %>% pull(!!sym('FullRunName'))
+    tech_reps <- c("TechRep")
+    samples_to_plot <- annotation %>%
+      filter(attribute_ExperimentalGroup %in% tech_reps) %>%
+      arrange(attribute_ExperimentalGroup, MS_batch) %>%
+      pull(!!sym('FullRunName'))
+    
+  } else if(batch_type == "Digestion_batch"){
+    sample_order <- annotation %>% arrange(attribute_ExperimentalGroup, Digestion_batch) %>% pull(!!sym('FullRunName'))
+    tech_reps <- c("DigRep")
+    samples_to_plot <- annotation %>%
+      filter(attribute_ExperimentalGroup %in% tech_reps) %>%
+      arrange(attribute_ExperimentalGroup, Digestion_batch) %>%
+      pull(!!sym('FullRunName'))
+  }
+  
+  techreps_to_plot = as.character(samples_to_plot)
+  
+  sample_data = subset(before, select=techreps_to_plot)
+  after_data = subset(after, select=techreps_to_plot)
+  
+  #keeping only samples that will be plotted in the annotation dataframe
+  annotation = annotation[(annotation$FullRunName %in% techreps_to_plot),]
+  annotation <- annotation %>% arrange(factor(FullRunName, levels = samples_to_plot))
+  
+  before_cv = subset(before, select=Protein)
+  after_cv = subset(after, select=Protein)
+  
+  #calculating CV across all samples
+  sample_data$across = rowCVs(sample_data)
+  after_data$across = rowCVs(after_data)
+  before_cv$across = rowCVs(sample_data)
+  after_cv$across = rowCVs(after_data)
+  
+  #calculating CV per technical group
+  
+  #getting samples under each technical group
+  labels = as.character(unique(annotation$attribute_TechnicalGroup))
+  name_data = subset(annotation, select=c("attribute_TechnicalGroup","FullRunName"))
+  
+  for(label in labels){
+    name_subset <- name_data[name_data$attribute_TechnicalGroup == label,]
+    samples = as.character(name_subset$FullRunName)
+    sample_subset <- subset(sample_data, select=samples)
+    sample_data[, label] = rowCVs(sample_subset)
+    before_cv[, label] = rowCVs(sample_subset)
+    after_subset <- subset(after_data, select=samples)
+    after_data[, label] = rowCVs(after_subset)
+    after_cv[, label] = rowCVs(after_subset)
+  }
+  
+  before_final <- melt(before_cv, id.vars=c('Protein'),var='TechnicalGroup')
+  colnames(before_final)[which(names(before_final) == "value")] <- "Before"
+  after_final <- melt(after_cv, id.vars=c('Protein'),var='TechnicalGroup')
+  colnames(after_final)[which(names(after_final) == "value")] <- "After"
+  
+  #getting scale for plots
+  
+  min_value = 0
+  max_value = max(max(before_final$Before),max(after_final$After))
+  
+  #violin plot
+  tech_groups <- factor(before_final$TechnicalGroup)
+  
+  before_plot <- ggplot(before_final, aes(x = TechnicalGroup, y = Before, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) +
+    ggtitle(paste0("CV Violin Plot - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "Before Correction",
+         fill = "TechnicalGroup")
+  
+  after_plot <- ggplot(after_final, aes(x = TechnicalGroup, y = After, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) + 
+    ggtitle(paste0("CV Violin Plot - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "After Correction",
+         fill = "TechnicalGroup")
+  
+  final_plot = plot_grid(before_plot, after_plot, align="h", scale=1)
+  
+}
+
+corr_violinplot <- function(before, after, annotation, batch_type){
+  # This function calls the corr_violin function depending on the batch_type from user input
+  # and returns the plots in a list
+  
+  ## dropping the protein column
+  #before_data = subset(before, select=-Protein)
+  #after_data = subset(after, select=-Protein)
+  before_data = before
+  after_data = after
+  
+  if(batch_type=="DR:Digestion_batch,TR:MS_batch"){
+    ms_plot = corr_violin(before_data, after_data, annotation,"MS_batch","TechReps")
+    digestion_plot = corr_violin(before_data, after_data, annotation, "Digestion_batch","DigReps")
+    plot_list = list(ms_plot, digestion_plot)
+    return(plot_list)
+  } else if(batch_type=="DR:Digestion_batch"){
+    final_plot = corr_violin(before_data, after_data, annotation, "Digestion_batch","DigReps")
+    return(list(final_plot))
+  } else if(batch_type=="TR:MS_batch"){
+    final_plot = corr_violin(before_data, after_data, annotation,"MS_batch","TechReps")
+    return(list(final_plot))
+  } else {
+    stop("Invalid batchtype entered.")
+  }
+}
+
+corr_violin <- function(before_data, after_data, annotation, batch_type, reps){
+  # This function pre-processes the before correction data, after correction data and the annotation data
+  # it creates correlation matrices and then calculates the average across and within all technical groups
+  # it then creates 4 violin plots 
+  
+  #getting sample order based on batch_type 
+  if (batch_type == "MS_batch"){
+    sample_order <- annotation %>% arrange(attribute_ExperimentalGroup, MS_batch) %>% pull(!!sym('FullRunName'))
+    tech_reps <- c("TechRep")
+    samples_to_plot <- annotation %>%
+      filter(attribute_ExperimentalGroup %in% tech_reps) %>%
+      arrange(attribute_ExperimentalGroup, MS_batch) %>%
+      pull(!!sym('FullRunName'))
+    
+  } else if(batch_type == "Digestion_batch"){
+    sample_order <- annotation %>% arrange(attribute_ExperimentalGroup, Digestion_batch) %>% pull(!!sym('FullRunName'))
+    tech_reps <- c("DigRep")
+    samples_to_plot <- annotation %>%
+      filter(attribute_ExperimentalGroup %in% tech_reps) %>%
+      arrange(attribute_ExperimentalGroup, Digestion_batch) %>%
+      pull(!!sym('FullRunName'))
+  }
+  
+  #arranging samples names in data matrices using the sample order
+  before_data <- before_data %>% as.data.frame %>% arrange(factor(row.names(before_data), levels = sample_order))
+  after_data <- after_data %>% as.data.frame %>% arrange(factor(row.names(after_data), levels = sample_order)) 
+  
+  #creating the correlation matrix based on sample names filtering and arranged by batch_type
+  techreps_to_plot = as.character(samples_to_plot)
+  
+  before_data = subset(before_data, select=techreps_to_plot)
+  after_data = subset(after_data, select=techreps_to_plot)
+  
+  before_corr = data.frame(cor(before_data, use = 'complete.obs'))
+  after_corr = data.frame(cor(after_data, use = 'complete.obs'))
+  
+  #keeping only samples that will be plotted in the annotation dataframe
+  annotation = annotation[(annotation$FullRunName %in% techreps_to_plot),]
+  annotation <- annotation %>% arrange(factor(FullRunName, levels = samples_to_plot))
+  
+  ######### Getting the Mean ###########
+  
+  #calculating mean across all row values 
+  before_corr$across<- rowMeans(before_corr)
+  after_corr$across <- rowMeans(after_corr)
+  
+  #getting samples under each technical group
+  labels = as.character(unique(annotation$attribute_TechnicalGroup))
+  name_data = subset(annotation, select=c("attribute_TechnicalGroup","FullRunName"))
+  row.names(name_data) = name_data$FullRunName
+  
+  #adding sample and technical group data to the correlation dataframes
+  before_corr <- merge(before_corr, name_data, by=0, all=TRUE)
+  before_corr <- before_corr %>% arrange(factor(FullRunName, levels = samples_to_plot))
+  row.names(before_corr) <- before_corr$Row.names
+  after_corr <- merge(after_corr, name_data, by=0, all=TRUE)
+  after_corr <- after_corr %>% arrange(factor(FullRunName, levels = samples_to_plot))
+  row.names(after_corr) <- after_corr$Row.names
+  
+  #calculating mean within groups 
+  calMeans_Before <- function(sample_name, label_name){
+    sample_names = rownames(before_corr)[before_corr$attribute_TechnicalGroup == label_name]
+    data = subset(before_corr, select = sample_names)
+    onerow = as.numeric(as.vector(data[sample_name,]))
+    final_mean = mean(onerow, na.rm = FALSE)
+    return(final_mean)
+  }
+  
+  calMeans_After <- function(sample_name, label_name){
+    sample_names = rownames(after_corr)[after_corr$attribute_TechnicalGroup == label_name]
+    data = subset(after_corr, select = sample_names)
+    onerow = as.numeric(as.vector(data[sample_name,]))
+    final_mean = mean(onerow, na.rm = FALSE)
+    return(final_mean)
+  }
+  
+  before_corr$within <- mapply(calMeans_Before, 
+                               sample_name = as.character(before_corr$FullRunName), 
+                               label_name = as.character(before_corr$attribute_TechnicalGroup))
+  after_corr$within <- mapply(calMeans_After, 
+                              sample_name = as.character(after_corr$FullRunName), 
+                              label_name = as.character(after_corr$attribute_TechnicalGroup))
+  
+  #reshape 
+  
+  before = subset(before_corr, select=c("attribute_TechnicalGroup","within","across"))
+  after = subset(after_corr, select=c("attribute_TechnicalGroup","within","across"))
+  
+  #violin plot
+  tech_groups <- factor(before$attribute_TechnicalGroup)
+  
+  min_value = min(min(before$within),min(before$across),min(after$within),min(after$across))
+  max_value = max(max(before$within),max(before$across),max(after$within),max(after$across))
+  
+  before_within_plot = ggplot(before, aes(x = attribute_TechnicalGroup, y = within, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) +
+    ggtitle(paste0("Before Correction - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "Average Within Technical Groups",
+         fill = "TechnicalGroup")
+  
+  before_across_plot = ggplot(before, aes(x = attribute_TechnicalGroup, y = across, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) +
+    ggtitle(paste0("Before Correction - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "Average across Technical Groups",
+         fill = "TechnicalGroup")
+  
+  after_within_plot = ggplot(after, aes(x = attribute_TechnicalGroup, y = within, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) +
+    ggtitle(paste0("After Correction - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "Average within Technical Groups",
+         fill = "TechnicalGroup")
+  
+  after_across_plot = ggplot(after, aes(x = attribute_TechnicalGroup, y = across, fill = tech_groups)) + 
+    geom_violin(trim = FALSE) +
+    geom_jitter(aes(fill = tech_groups), width = 0.2, shape = 21) +
+    stat_summary(fun.data=mean_sdl, fun.args = list(mult=1),
+                 geom="pointrange", shape = 17, color = "white") +
+    ylim(min_value, max_value) +
+    ggtitle(paste0("After Correction - ", reps)) +
+    theme(plot.title = element_text(hjust = 0.5)) +
+    labs(x = "TechnicalGroup",
+         y = "Average across Technical Groups",
+         fill = "TechnicalGroup")
+  
+  final_plot = plot_grid(before_within_plot, after_within_plot,before_across_plot,after_across_plot,ncol=2 ,align="h", scale=1)
+  return(final_plot)
+  
+}
+
+# Function to create bar graphs for initial analysis
+plot_bar <- function(annotation_data, col_of_int, color_list) {
+  # necessary packages / libraries
+  require(ggplot2)
+  require(RColorBrewer)
+  require(ggpubr)
+  
+  table1_stacked <- annotation_data %>% 
+    group_by("Batch_name"=annotation_data[[col_of_int]]) %>%
+    dplyr::tally() %>%
+    dplyr::mutate(percent=n/sum(n)) %>%
+    mutate(Batch_type = toString(col_of_int))
+  
+  p <- ggplot(data = table1_stacked, aes(x = Batch_type, y=n, fill = Batch_name)) +
+    geom_bar(stat="identity", position = "fill", width=0.4) +
+    geom_label(aes(label = paste0(sprintf("%1.1f", percent*100),"%, n=", n), group = Batch_name), position = position_fill(vjust = 0.5), fill="white", size=2) +
+    scale_fill_manual(values = color_list[[col_of_int]]) +
+    scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
+    theme_minimal()
+  
+  p <- p + 
+    theme(axis.title.x = element_blank(), 
+          axis.title.y = element_blank(), 
+          axis.ticks.y = element_blank(), 
+          #legend.position="bottom",
+          legend.position = c(0.8, 0.2),
+          legend.title=element_blank(),
+          plot.margin=grid::unit(c(0,0,0,0), "mm")) +
+    ylab("Percent") +
+    labs(fill = toString(col_of_int)) 
+  
+  return(p)
+}
+
+# Balloon plot showing a grid of exp grp X batch col  
+plot_balloon <- function(annotation_data, batch_col, exp_grp) {
+  anno_for_plot <- annotation_data %>%  dplyr::count(across(exp_grp), across(batch_col))
+  
+  p <- ggplot(anno_for_plot, aes(x=anno_for_plot[[exp_grp]], y=anno_for_plot[[batch_col]])) +
+    geom_point(aes(size = n), shape = 21, colour = "black", fill = "cornsilk") +
+    scale_size_area(max_size = 15, guide = "none") +
+    geom_text(aes(
+      y = as.numeric(as.factor(anno_for_plot[[batch_col]])) - sqrt(n)/34, label = n),
+      vjust = 2.0,
+      colour = "black",
+      size = 3
+    ) +
+    ggtitle(paste0("Experimental group X ", batch_col)) +
+    xlab(toString(exp_grp)) +
+    ylab(toString(batch_col)) +
+    theme(plot.title = element_text(size = 15, hjust = 0.5)) +
+    theme(plot.margin = margin(1,1,1.5,1, "cm"))
+  return(p)
+}
+
+calc_stat <- function(x) {
+  coef <- 1.5
+  n <- sum(!is.na(x))
+  # calculate quantiles
+  stats <- quantile(x, probs = c(0.1, 0.25, 0.5, 0.75, 0.9))
+  names(stats) <- c("ymin", "lower", "middle", "upper", "ymax")
+  return(stats)
+}
+
+plot_boxnorm <- function(box_norm.m, color_list, exp_grp) {
+  # necessary packages / libraries
+  require(ggplot2)
+  require(RColorBrewer)
+  require(ggpubr)
+  
+  return(
+    ggplot(data=box_norm.m, mapping=aes(x=FullRunName, y=Intensity, fill=get(exp_grp))) +
+      #geom_boxplot(color="grey30") +
+      stat_summary(fun.data = calc_stat, geom="boxplot") +
+      theme_classic2()+
+      scale_fill_manual(name=as.character(exp_grp), values = color_list[[exp_grp]]) +
+      theme(text = element_text(size = 14,face="bold"),
+            axis.text.x = element_blank(),
+            axis.text.y = element_text(size = 12,face="bold")) +
+      theme(legend.position = "right") +
+      labs(fill = exp_grp)
+  )
+}
+
+plotly_corr <- function(for_heatmap, anno_for_corr, col_element, replicate_filenames, color_list) {
+  # necessary libraries / packages
+  require(plotly)
+  require(iheatmapr)
+  require(RColorBrewer)
+  require(scales)
+  require(stringr)
+  
+  # sample order, separate for rows and columns
+  sample_order = as.vector(anno_for_corr$FullRunName)
+  sample_order2 = rev(sample_order)
+  
+  # annotation order, separate for rows and columns
+  anno_order = as.vector(anno_for_corr[[col_element]])
+  anno_df <- data.frame(matrix(ncol = 0, nrow = nrow(anno_for_corr)))
+  anno_df[ , ncol(anno_df) + 1] <- anno_order
+  colnames(anno_df)[ncol(anno_df)] <- paste0(as.character(col_element))
+  
+  anno_order2 = rev(anno_order)
+  anno_df2 <- data.frame(matrix(ncol = 0, nrow = nrow(anno_for_corr)))
+  anno_df2[ , ncol(anno_df2) + 1] <- anno_order2
+  colnames(anno_df2)[ncol(anno_df2)] <- paste0(as.character(col_element))
+  
+  # make correlation matrix
+  sample_matrix.corr <- for_heatmap[, which((names(for_heatmap) %in% replicate_filenames)==TRUE)]
+  
+  sample_matrix.corr <- cor(sample_matrix.corr, method = "spearman")
+  sample_matrix.corr[is.na(sample_matrix.corr)] <- 0
+  sample_matrix.corr[!is.finite(sample_matrix.corr)] <- 0
+  
+  # order correlation matrix by sample order for rows and columns
+  sample_matrix.corr <- sample_matrix.corr[, sample_order2]
+  
+  sample_matrix.corr <- as.data.frame(sample_matrix.corr) %>%
+    rownames_to_column(var="sample") %>%
+    slice(match(sample_order, sample)) %>%
+    column_to_rownames(var="sample")
+  
+  sample_matrix.corr <- as.matrix(sample_matrix.corr)
+  
+  # get corresponding color_list for correlation annotation
+  # because sometimes we will not want to print all batches for correlation
+  corr_anno_color_list <- c()
+  for (i in seq(1,length(color_list[[col_element]]))){
+    color <- color_list[[col_element]][i]
+    #print(paste(names(color_list[[col_element]][i]), "goes", color))
+    #print(color)
+    if (names(color_list[[col_element]][i]) %in% anno_for_corr[[col_element]]) {
+      corr_anno_color_list <- append(corr_anno_color_list, color)
+    }
+  }
+  #corr_anno_color_list <- as.vector(corr_anno_color_list)
+  #print(corr_anno_color_list)
+  corr_anno_2 <- list()
+  corr_anno_2[[col_element]] <- corr_anno_color_list
+  #print(corr_anno_2)
+  
+  p <- main_heatmap(
+    sample_matrix.corr,
+    name = "Scaled<br>Intensity",
+    colors = "RdYlBu",
+    tooltip = setup_tooltip_options(
+      value = FALSE,
+      prepend_row = "FullRunName: "
+    ),
+    layout = list(font = list(size = 0.5), height = 500)
+  ) %>% 
+    add_col_annotation(
+      colors = corr_anno_2,
+      side = "top",
+      anno_df
+    ) %>%
+    add_row_annotation(
+      colors = corr_anno_2,
+      side = "left",
+      anno_df2
+    )
+  p <- p %>% 
+    # convert IHeatmapR object to Plotly object, needed to embed in HTML
+    to_plotly_list() %>% 
+    plotly::as_widget() %>% 
+    config(
+      displayModeBar = T,
+      displaylogo = F
+    ) %>%
+    layout(height = 500, width = 500)
+  return(p)
+}
+
+```
+
+```{r for plotly plots in html, include=FALSE}
+htmltools::tagList(plotly::ggplotly(ggplot()))
+```
+
+```{r Set variables, echo=F, include=F}
+
+SAMPLE_INPUT_NORM <- args$input_norm
+SAMPLE_INPUT_UNNORM <- args$input_unnorm
+ANNOTATION_INPUT <- args$metadata_annotation
+OUTPUT_DIR <- args$output_dir
+OUTFILE_PREFIX <- args$outfile_prefix
+BATCH_COL <- args$batch_column
+COLS_OF_INTEREST <-args$cols_of_interest
+SAMPLE_NA_CUTOFF <- args$sample_threshold
+EXPGRP_NA_CUTOFF <- args$expgroup_threshold
+BATCH_NA_CUTOFF <- args$batch_threshold
+SAMPLES_FOR_CORRELATION <- args$samples_for_correlation
+#FRAG_ANNO <- args$iRT_annotation
+iRT_protein <- args$iRT_protein_name
+IMPUTATION_METHOD <- args$imputation_method
+QUANTILE_NORM <- args$quantile_norm
+BATCH_CORRECT_FIRST <- args$batch_correction_first
+MINIMAL <- args$minimal
+PDF_WIDTH <- args$pdf_width
+PDF_HEIGHT <- args$pdf_length
+
+if (is.na(SAMPLE_INPUT_NORM) || !file.exists(SAMPLE_INPUT_NORM))
+  stop("Invalid input to required option --input_norm.")
+if (is.na(SAMPLE_INPUT_UNNORM) || !file.exists(SAMPLE_INPUT_UNNORM))
+  stop("Invalid input to required option --input_unnorm.")
+if (is.na(ANNOTATION_INPUT) || !file.exists(ANNOTATION_INPUT))
+  stop("Invalid input to required option --metadata_annotation")
+#if (is.na(FRAG_ANNO) || !file.exists(FRAG_ANNO))
+#  stop("Invalid input to required option --iRT_annotation")
+if (is.na(OUTPUT_DIR) || !dir.exists(OUTPUT_DIR))
+  stop("Invalid directory specified to required option --output_dir")
+if (SAMPLE_NA_CUTOFF < 0 || SAMPLE_NA_CUTOFF > 1)
+  stop("--sample_threshold must be a value between 0 and 1")
+if (EXPGRP_NA_CUTOFF < 0 || EXPGRP_NA_CUTOFF > 1)
+  stop("--expgroup_threshold must be a value between 0 and 1")
+if (BATCH_NA_CUTOFF < 0 || BATCH_NA_CUTOFF > 1)
+  stop("--batch_threshold must be a value between 0 and 1")
+  
+supported_imputation <-c("zero","minimum","colmedian","rowmedian",
+                         "knnmethod","seqknn","bpca","svdmethod",
+                         "lls","mle","qrilc","mindet","minprob",
+                         "impseq","impseqrob",
+                         "mice-norm","mice-cart","trknn",
+                         "rf","ranger","pi","grr","gms", "halfminimum")
+if (!IMPUTATION_METHOD %in% supported_imputation)
+  stop(paste0("Unsupported --imputation_method. Specify one of: ", paste0(supported_imputation, collapse=", ")))
+
+if (PDF_WIDTH < 0 || PDF_WIDTH > 50)
+  stop("Please set --pdf_width to a reasonable value between 0 and 50 inches")
+if (PDF_HEIGHT < 0 || PDF_HEIGHT > 50)
+  stop("Please set --pdf_length to a reasonable value between 0 and 50 inches")
+```
+
+## Analysis Settings {.tabset}
+### Input/Output Files
+```{r Files, echo=F, results='asis', fig.keep='all', message=FALSE, warning=FALSE}
+knitr::kable(
+  tibble(
+    c("Normalized File:", ifelse(is.na(SAMPLE_INPUT_NORM), NA, file.path(dirname(SAMPLE_INPUT_NORM), basename(SAMPLE_INPUT_NORM)))),
+    c("Unnormalized File: ", ifelse(is.na(SAMPLE_INPUT_UNNORM), NA, file.path(dirname(SAMPLE_INPUT_UNNORM), basename(SAMPLE_INPUT_UNNORM)))),
+    c("Annotation File: ", file.path(dirname(ANNOTATION_INPUT), basename(ANNOTATION_INPUT))),
+    #c("Fragment Annotation: ", ifelse(is.na(FRAG_ANNO), NA, file.path(dirname(FRAG_ANNO), basename(FRAG_ANNO)))),
+    c("Output directory: ", file.path(dirname(OUTPUT_DIR), basename(OUTPUT_DIR))), 
+    c("Output file prefix: ", file.path(dirname(OUTFILE_PREFIX), basename(OUTFILE_PREFIX))), 
+    .name_repair = "minimal"
+  ) %>% 
+    t(),
+  row.names = F,
+  caption = "The report was generated using these input files.",
+  label = "display input/output files kable"
+)
+```
+
+### Parameters
+```{r echo=F, message=FALSE, warning=FALSE, results='asis'}
+knitr::kable(
+  tibble(
+    c("Batch column:", BATCH_COL),
+    c("Columns of interest:", COLS_OF_INTEREST),
+    c("Sample threshold:", SAMPLE_NA_CUTOFF),
+    c("Experimental group threshold: ", EXPGRP_NA_CUTOFF),
+    c("Batch threshold: ", BATCH_NA_CUTOFF),
+    c("Samples for correlation: ", SAMPLES_FOR_CORRELATION),
+    c("iRT protein name: ", iRT_protein), 
+    c("Imputation method: ", IMPUTATION_METHOD),
+    c("Quantile normalization: ", QUANTILE_NORM), 
+    c("Batch correct first: ", BATCH_CORRECT_FIRST),
+    c("PDF width: ", PDF_WIDTH), 
+    c("PDF height: ", PDF_HEIGHT),
+    .name_repair = "minimal"
+  ) %>% 
+    t(),
+  row.names = F,
+  caption = "The report was generated using these parameters.",
+  label = "display parameters kable"
+)
+```
+
+```{r Reading input files, include=F}
+# ---------- loading Info ------------------------
+sample_matrix <- read.delim(SAMPLE_INPUT_NORM)
+sample_matrix_unnorm <- read.delim(SAMPLE_INPUT_UNNORM) 
+annotation_data <- read.delim(ANNOTATION_INPUT)
+#fragment_annotation <- read.delim(FRAG_ANNO)
+
+check_cols_of_interest <- unlist(strsplit(COLS_OF_INTEREST, ","))
+anno_cols <- c("attribute_ExperimentalGroup", "Level3", "order")
+###changed
+#df_cols <- c("ProteinName", "PeptideSequence", "FragmentIon")
+df_cols <- c("Protein") #disabling protein_concat so this column needs to be called "Protein"
+
+sample_for_correlation <-  c()
+column_for_correlation <-  c()
+correlation_samples <- unlist(strsplit(SAMPLES_FOR_CORRELATION, ","))
+if (length(correlation_samples) > 0) {
+  for( i in correlation_samples ){
+    split_samples_column <- unlist(strsplit(i, ":"))
+	if (length(split_samples_column) != 2) {
+	  stop("Required format for DR/TR heatmap - Keyword:Column_name")
+	}
+	else {
+	  sample_for_correlation <- c(sample_for_correlation, split_samples_column[1])
+	  column_for_correlation <- c(column_for_correlation, split_samples_column[2])
+	}
+  }
+} 
+
+check_headers(sample_matrix, annotation_data, df_cols, c(anno_cols,check_cols_of_interest,column_for_correlation))
+
+# Replace hyphen with underscore
+sample_matrix <- colClean(sample_matrix)
+sample_matrix_unnorm <- colClean(sample_matrix_unnorm)
+annotation_data <- colClean2(annotation_data)
+
+# Rename Level3 column to FullRunName
+annotation_data <- rename_level3(annotation_data)
+
+# Drop RT from sample matrix norm and unnorm
+sample_matrix = sample_matrix[ , !(names(sample_matrix) %in% c('RT'))]
+sample_matrix_unnorm = sample_matrix_unnorm[ , !(names(sample_matrix_unnorm) %in% c('RT'))]
+
+num_of_file <- length(rownames(sample_matrix))
+if ((10/num_of_file)*40 > 10){
+    FONTSIZE_sample_axis = 10
+  }else{
+    FONTSIZE_sample_axis = (10/num_of_file)*150
+}
+
+###changed
+# Concatenate Protein, Peptide, Fragment into single column
+#sample_matrix <- protein_concat(sample_matrix)
+#sample_matrix_unnorm <- protein_concat(sample_matrix_unnorm)
+
+# Use for final summary table
+pre_filt_data <- sample_matrix
+```
+
+```{r other vars, echo=F}
+suppressMessages({
+technical_factors <- check_cols_of_interest
+biological_factors <- c('attribute_ExperimentalGroup')
+selected_annotations <- c(biological_factors, technical_factors)
+plot_for_pca <- c(biological_factors, technical_factors)
+####suppressWarnings({
+  color_list <- sample_annotation_to_colors(
+    annotation_data,
+    factor_columns = c(biological_factors, technical_factors),
+    numeric_columns = c('order')
+  )
+####})
+breaksList <- seq(0.7, 1, by = 0.01)
+heatmap_colors = colorRampPalette(rev(RColorBrewer::brewer.pal(n = 7, name = 'RdYlBu')))(length(breaksList) + 1)
+
+})
+```
+
+## Initial analysis {.tabset}
+### Sample distribution
+```{r metrics from annotations, fig.width=16, fig.height=8, echo=F, results='asis', message=FALSE, warning=FALSE}
+
+index = 0
+p <- list()
+for (i in selected_annotations) {
+  index = index + 1
+  #cat("### Samples by ", i, "\n\n", sep="")
+  p[[index]] <- plot_bar(annotation_data, i, color_list)
+  #print(p1)
+}
+
+grid.arrange(grobs=p, ncol=3)
+
+```
+
+### Sample matrix
+```{r sample matrix, fig.width=12, echo=F, results='asis', message=FALSE, warning=FALSE}
+
+for (i in technical_factors) {
+  balloon_plot <- plot_balloon(annotation_data, i, "attribute_ExperimentalGroup")
+  print(balloon_plot)
+}
+
+```
+
+### Missingness distribution
+```{r Plot Missing Values, fig.width=12, echo=F, results='asis'}
+overlaps <- call_missing_vals(sample_matrix, annotation_data, BATCH_COL)
+overlaps2 <- call_missing_vals(sample_matrix, annotation_data, "attribute_ExperimentalGroup")
+cat("\n\nPareto plot\n\n", sep="")
+plot_pareto(overlaps)
+
+cat("\n\nOrdering to identify if missingness pattern is based on batch\n\n", sep="")
+for (i in technical_factors) {
+  overlaps_temp <- call_missing_vals(sample_matrix, annotation_data, i)
+  p <- plot_missval(overlaps_temp, color_list, i)
+  print(p)
+}
+
+cat("\n\nOrdering to identify if missingness pattern is based on experimental group\n\n", sep="")
+plot_missval(overlaps2, color_list, "attribute_ExperimentalGroup")
+```
+
+### Take away 
+```{r Take away table, echo=F, results='asis', message=FALSE, warning=FALSE}
+init_table <- data.frame(matrix(ncol = 12, nrow=length(technical_factors)))
+x <- c("Batch_column", "Total_num_of_plates", "Max_num_of_samples", "Min_num_of_samples", "Variation_in_sample_distribution", "Plates_passing_distri_cutoff", "Num_of_plates_passing_distri_cutoff", "Max_missing_by_plate", "Min_missing_by_plate", "Variation_in_missingness", "Plates_passing_missing_cutoff", "Num_of_plates_passing_missing_cutoff")
+colnames(init_table) <- x
+init_table_index = 0
+    
+protein <- "Protein"
+    
+for (i in technical_factors) {
+  init_table_index = init_table_index + 1  
+      
+  samps_table <- annotation_data %>% 
+    group_by("Group"=annotation_data[[i]]) %>% 
+    summarise(Sample_count = n()) %>%
+    mutate(Sample_percentage=100*Sample_count/sum(Sample_count))
+      
+  overlaps_for_init_table <- pivot_longer(sample_matrix, cols = c(everything(), -protein), names_to = "FullRunName", values_to = "Intensity") %>% 
+    left_join(annotation_data, by="FullRunName") %>% 
+    dplyr::rename("SampleName" = "FullRunName" , "Group" := !!i) %>% 
+    subset(select=c(protein,"Intensity","SampleName","Group")) %>%
+    group_by(Group) %>%
+    summarise(na_count = sum(is.na(Intensity)), not_na = sum(!is.na(Intensity))) %>%
+    mutate(total = na_count + not_na) %>%
+    mutate(perc_of_na = na_count/total*100) 
+      
+  overlaps_final <- merge(overlaps_for_init_table, samps_table)
+      
+  Batch_col <- toString(i)
+  Max_missing_by_plate <- overlaps_final %>% summarise(max(perc_of_na))
+  Min_missing_by_plate <- overlaps_final %>% summarise(min(perc_of_na))
+  Variation_in_missingness <- (Max_missing_by_plate - Min_missing_by_plate)/Max_missing_by_plate
+  Plates_passing_missing_cutoff <- overlaps_final %>% summarise(sum(perc_of_na < 50)) 
+  Total_num_of_plates <- nrow(overlaps_final)
+  Num_of_plates_passing_missing_cutoff <- paste0(Plates_passing_missing_cutoff, " out of ", Total_num_of_plates)
+      
+  Max_num_of_samples <- overlaps_final %>% summarise(max(Sample_count))
+  Min_num_of_samples <- overlaps_final %>% summarise(min(Sample_count))
+  Variation_in_sample_distribution <- (Max_num_of_samples - Min_num_of_samples)/Max_num_of_samples*100
+  Plates_passing_distri_cutoff <- overlaps_final %>% summarise(sum(Sample_count > 25)) 
+  Num_of_plates_passing_distri_cutoff <- paste0(Plates_passing_distri_cutoff, " out of ", Total_num_of_plates)
+      
+  row_to_add = c(Batch_col, Total_num_of_plates, Max_num_of_samples, Min_num_of_samples, Variation_in_sample_distribution, Plates_passing_distri_cutoff, Num_of_plates_passing_distri_cutoff, Max_missing_by_plate, Min_missing_by_plate, Variation_in_missingness, Plates_passing_missing_cutoff, Num_of_plates_passing_missing_cutoff)
+      
+  init_table[init_table_index,] <- row_to_add
+}
+    
+init_table <- init_table %>% 
+    select(-Max_missing_by_plate, -Min_missing_by_plate, -Max_num_of_samples, -Min_num_of_samples, -Plates_passing_missing_cutoff, -Plates_passing_distri_cutoff, -Total_num_of_plates) %>%
+    mutate(Variation_in_missingness = round(Variation_in_missingness, 4)) %>%
+    mutate(Variation_in_sample_distribution = round(Variation_in_sample_distribution, 4))
+
+init_table$Variation_in_missingness <- paste0(init_table$Variation_in_missingness, " %")
+init_table$Variation_in_sample_distribution <- paste0(init_table$Variation_in_sample_distribution, " %")
+    
+# Print init table
+knitr::kable(init_table)
+
+# joined_df for note on missingness
+table2 <- sample_matrix %>%
+  select(everything()) %>%
+  summarise_all(funs(sum(is.na(.)))) %>%
+  rownames_to_column() %>%
+  pivot_longer(cols=-rowname)
+    
+joined_df <- merge(table2, annotation_data, by.x = "name", by.y = "FullRunName")
+joined_df <- joined_df %>% 
+  select(technical_factors, "attribute_ExperimentalGroup", "name", "value")
+
+print(paste("Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) is ", sum(joined_df$value), "and the percent of missing data is ", round((sum(joined_df$value)/(nrow(sample_matrix)*(ncol(sample_matrix)-1)))*100, 2), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction."))
+
+```
+
+## Filtering {.tabset}
+### Fragments per Sample
+```{r Plot Missing Values4, fig.width=12, echo=F, results='asis', fig.keep='all', message=FALSE, warning=FALSE}
+cat("\n\n Missingness percent by sample to identify samples containing high missingness\n\n", sep="")
+plot_per_sample(overlaps2, color_list, "attribute_ExperimentalGroup")
+```
+
+### Fragments per Group
+```{r Plot Missing Values5, fig.width=12, echo=F, results='asis', fig.keep='all', message=FALSE, warning=FALSE}
+cat("\n\n Missingness percent by group to identify how many fragments passed the threshold. NOTE:For a fragment to fail missingness threshold, failure must occur aross all experimental groups.\n\n", sep="")
+plot_missgroup(overlaps2, EXPGRP_NA_CUTOFF)
+```
+
+### Fragments per Batch
+```{r Plot Missing Values6, fig.width=12, echo=F, results='asis', fig.keep='all', message=FALSE, warning=FALSE}
+cat("\n\n Missingness percent by batch to identify how many fragments passed the threshold. NOTE:For a fragment to fail missingness threshold, failure can occur in any batch.\n\n", sep="")
+plot_missbatch(overlaps, BATCH_NA_CUTOFF)
+```
+
+```{r Filter Samples, fig.width=12, echo=F, results='hide', fig.keep='all', message=FALSE, warning=FALSE}
+# Remove fragments with batches that have < 2 intensities, and samples that are singletons in a plate, from norm and unnorm
+sample_matrix <- minimal_filtering(sample_matrix, annotation_data, BATCH_COL)
+sample_matrix_unnorm <- minimal_filtering(sample_matrix_unnorm, annotation_data, BATCH_COL)
+
+annotation_data <- as.data.frame(sample_matrix[[2]])
+sample_matrix <- as.data.frame(sample_matrix[[1]])
+sample_matrix_unnorm <- as.data.frame(sample_matrix_unnorm[[1]])
+
+# Filter norm and unnorm
+sample_matrix <- filter_samples(sample_matrix, annotation_data, SAMPLE_NA_CUTOFF, EXPGRP_NA_CUTOFF, BATCH_COL, BATCH_NA_CUTOFF)
+sample_matrix_unnorm <- filter_samples(sample_matrix_unnorm, annotation_data, SAMPLE_NA_CUTOFF, EXPGRP_NA_CUTOFF, BATCH_COL, BATCH_NA_CUTOFF)
+
+annotation_data <- as.data.frame(sample_matrix[[2]])
+sample_matrix <- as.data.frame(sample_matrix[[1]])
+sample_matrix_unnorm <- as.data.frame(sample_matrix_unnorm[[1]])
+
+```
+
+## Filtered results {.tabset}
+### Filtered stats
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
+# Use for summary notes after filt
+post_filt_data <- sample_matrix
+
+# joined_df2 for note on missingness
+table2 <- sample_matrix %>%
+  select(everything()) %>%
+  summarise_all(funs(sum(is.na(.)))) %>%
+  rownames_to_column() %>%
+  pivot_longer(cols=-rowname)
+    
+joined_df2 <- merge(table2, annotation_data, by.x = "name", by.y = "FullRunName")
+joined_df2 <- joined_df2 %>% 
+  select(technical_factors, "attribute_ExperimentalGroup", "name", "value")
+
+# To print
+cat("\n\n __Number of samples:__")
+cat("\n\n Initial number of samples was: ", toString(ncol(pre_filt_data)-1), sep=" ")
+cat("\n\n Number of samples remaining after filtering are: ", toString(ncol(sample_matrix)-1), sep=" ")
+    
+cat("\n\n __Number of fragments:__")
+cat("\n\n Initial number of fragments was: ", toString(nrow(pre_filt_data)), sep=" ")
+cat("\n\n Number of fragments remaining after filtering are: ", toString(nrow(sample_matrix)), sep=" ")
+
+cat("\n\n __Missingness before/after filtering:__")
+cat("\n\n Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) was ", toString(sum(joined_df$value)), "and the percent of missing data was ", toString(round((sum(joined_df$value)/(nrow(sample_matrix)*(ncol(pre_filt_data)-1)))*100, 2)), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.", sep=" ")
+cat("\n\n Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) after filtering is ", toString(sum(joined_df2$value)), "and the percent of missing data is ", toString(round((sum(joined_df2$value)/(nrow(sample_matrix_filt)*(ncol(sample_matrix)-1)))*100, 2)), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.", sep="")
+```
+
+### Sample distribution
+```{r metrics from annotations filtered, fig.width=16, fig.height=8, echo=F, results='asis', message=FALSE, warning=FALSE}
+
+index = 0
+p <- list()
+for (i in selected_annotations) {
+  index = index + 1
+  #cat("### Samples by ", i, "\n\n", sep="")
+  p[[index]] <- plot_bar(annotation_data, i, color_list)
+  #print(p1)
+}
+
+grid.arrange(grobs=p, ncol=3)
+
+```
+
+### Sample matrix
+```{r sample matrix filtered, fig.width=12, echo=F, results='asis', message=FALSE, warning=FALSE}
+
+for (i in technical_factors) {
+  balloon_plot <- plot_balloon(annotation_data, i, "attribute_ExperimentalGroup")
+  print(balloon_plot)
+}
+
+```
+
+### Missingness distribution
+```{r Plot Missing Values filtered, fig.width=12, echo=F, results='asis'}
+overlaps <- call_missing_vals(sample_matrix, annotation_data, BATCH_COL)
+overlaps2 <- call_missing_vals(sample_matrix, annotation_data, "attribute_ExperimentalGroup")
+cat("\n\nPareto plot\n\n", sep="")
+plot_pareto(overlaps)
+
+cat("\n\nOrdering to identify if missingness pattern is based on batch\n\n", sep="")
+for (i in technical_factors) {
+  overlaps_temp <- call_missing_vals(sample_matrix, annotation_data, i)
+  p <- plot_missval(overlaps_temp, color_list, i)
+  print(p)
+}
+
+cat("\n\nOrdering to identify if missingness pattern is based on experimental group\n\n", sep="")
+plot_missval(overlaps2, color_list, "attribute_ExperimentalGroup")
+```
+
+### Take away 
+```{r Take away table filtered, echo=F, results='asis', message=FALSE, warning=FALSE}
+init_table <- data.frame(matrix(ncol = 12, nrow=length(technical_factors)))
+x <- c("Batch_column", "Total_num_of_plates", "Max_num_of_samples", "Min_num_of_samples", "Variation_in_sample_distribution", "Plates_passing_distri_cutoff", "Num_of_plates_passing_distri_cutoff", "Max_missing_by_plate", "Min_missing_by_plate", "Variation_in_missingness", "Plates_passing_missing_cutoff", "Num_of_plates_passing_missing_cutoff")
+colnames(init_table) <- x
+init_table_index = 0
+    
+protein <- "Protein"
+    
+for (i in technical_factors) {
+  init_table_index = init_table_index + 1  
+      
+  samps_table <- annotation_data %>% 
+    group_by("Group"=annotation_data[[i]]) %>% 
+    summarise(Sample_count = n()) %>%
+    mutate(Sample_percentage=100*Sample_count/sum(Sample_count))
+      
+  overlaps_for_init_table <- pivot_longer(sample_matrix, cols = c(everything(), -protein), names_to = "FullRunName", values_to = "Intensity") %>% 
+    left_join(annotation_data, by="FullRunName") %>% 
+    dplyr::rename("SampleName" = "FullRunName" , "Group" := !!i) %>% 
+    subset(select=c(protein,"Intensity","SampleName","Group")) %>%
+    group_by(Group) %>%
+    summarise(na_count = sum(is.na(Intensity)), not_na = sum(!is.na(Intensity))) %>%
+    mutate(total = na_count + not_na) %>%
+    mutate(perc_of_na = na_count/total*100) 
+      
+  overlaps_final <- merge(overlaps_for_init_table, samps_table)
+      
+  Batch_col <- toString(i)
+  Max_missing_by_plate <- overlaps_final %>% summarise(max(perc_of_na))
+  Min_missing_by_plate <- overlaps_final %>% summarise(min(perc_of_na))
+  Variation_in_missingness <- (Max_missing_by_plate - Min_missing_by_plate)/Max_missing_by_plate
+  Plates_passing_missing_cutoff <- overlaps_final %>% summarise(sum(perc_of_na < 50)) 
+  Total_num_of_plates <- nrow(overlaps_final)
+  Num_of_plates_passing_missing_cutoff <- paste0(Plates_passing_missing_cutoff, " out of ", Total_num_of_plates)
+      
+  Max_num_of_samples <- overlaps_final %>% summarise(max(Sample_count))
+  Min_num_of_samples <- overlaps_final %>% summarise(min(Sample_count))
+  Variation_in_sample_distribution <- (Max_num_of_samples - Min_num_of_samples)/Max_num_of_samples*100
+  Plates_passing_distri_cutoff <- overlaps_final %>% summarise(sum(Sample_count > 25)) 
+  Num_of_plates_passing_distri_cutoff <- paste0(Plates_passing_distri_cutoff, " out of ", Total_num_of_plates)
+      
+  row_to_add = c(Batch_col, Total_num_of_plates, Max_num_of_samples, Min_num_of_samples, Variation_in_sample_distribution, Plates_passing_distri_cutoff, Num_of_plates_passing_distri_cutoff, Max_missing_by_plate, Min_missing_by_plate, Variation_in_missingness, Plates_passing_missing_cutoff, Num_of_plates_passing_missing_cutoff)
+      
+  init_table[init_table_index,] <- row_to_add
+}
+    
+init_table <- init_table %>% 
+    select(-Max_missing_by_plate, -Min_missing_by_plate, -Max_num_of_samples, -Min_num_of_samples, -Plates_passing_missing_cutoff, -Plates_passing_distri_cutoff, -Total_num_of_plates) %>%
+    mutate(Variation_in_missingness = round(Variation_in_missingness, 4)) %>%
+    mutate(Variation_in_sample_distribution = round(Variation_in_sample_distribution, 4))
+
+init_table$Variation_in_missingness <- paste0(init_table$Variation_in_missingness, " %")
+init_table$Variation_in_sample_distribution <- paste0(init_table$Variation_in_sample_distribution, " %")
+    
+# Print init table
+knitr::kable(init_table)
+
+print(paste("Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) is ", sum(joined_df$value), "and the percent of missing data is ", round((sum(joined_df$value)/(nrow(sample_matrix)*(ncol(sample_matrix)-1)))*100, 2), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction."))
+
+```
+
+```{r Preprocessing2, fig.width=12, echo=F, results='hide' ,fig.keep='all', message=FALSE, warning=FALSE}
+# Order FullRunName in annotation with samples in input file
+annotation_data <- order_samples(sample_matrix, annotation_data)
+
+# To make iRT plots, create own iRT mapping file
+fragment_annotation <- dplyr::filter(sample_matrix, grepl(iRT_protein, sample_matrix$Protein))
+
+fragment_annotation <- fragment_annotation["Protein"]
+colnames(fragment_annotation) <- c("peptide_group_label")
+
+fragment_annotation <- fragment_annotation %>%
+  add_column(Protein = iRT_protein,
+             .before = "peptide_group_label")
+
+# Export filtered
+results_matrix <- sample_matrix
+write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_filtnorm.tsv")), sep="\t", row.names=F, quote=F) # export to file
+
+results_matrix <- annotation_data
+write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_filtanno.tsv")), sep="\t", row.names=F, quote=F) # export to file
+  
+results_matrix <- sample_matrix_unnorm
+write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_filtunnorm.tsv")), sep="\t", row.names=F, quote=F) # export to file
+```
+
+```{r Process norm and unnorm files, echo=F}
+suppressMessages({
+rownames(sample_matrix) <- sample_matrix$Protein 
+sample_matrix <- sample_matrix[,-which(colnames(sample_matrix) %in% c("Protein", "nPeptide", "nFragment", "RT"))] 
+sample_norm_long <- matrix_to_long(sample_matrix) 
+
+rownames(sample_matrix_unnorm) <- sample_matrix_unnorm$Protein 
+sample_matrix_unnorm <- sample_matrix_unnorm[,-which(colnames(sample_matrix_unnorm) %in% c("Protein", "nPeptide", "nFragment", "RT"))] 
+sample_unnorm_long <- matrix_to_long(sample_matrix_unnorm) 
+
+if (QUANTILE_NORM) {
+  quantile_normalized_matrix <- normalize_data_dm(as.matrix(sample_matrix_unnorm), normalize_func = "quantile")
+  quantile_normalized_matrix_long <- matrix_to_long(quantile_normalized_matrix) 
+
+  sample_matrix <- quantile_normalized_matrix
+  sample_norm_long <- quantile_normalized_matrix_long
+}
+})
+```
+
+```{r Log Transform normalized data, echo=T}
+# ------------- LOG TRANSFORM ------------
+suppressMessages({
+sample_matrix.logged <- log_transform_dm(sample_matrix, log_base = 2, offset = 1)
+sample_long.logged <- matrix_to_long(sample_matrix.logged) 
+})
+```
+
+```{r H2: Batch correction and imputation, echo=F, results='asis', message=FALSE, warning=FALSE}
+# ------------ BATCH CORRECTION & IMPUTATION ----------------
+
+# Method that calls the impute function on each of the split files
+impute_on_split_data <- function(list_of_files) {
+  #print(list_of_files)
+  packages_needed <-c ("missRanger","dplyr","tidyverse","tibble","doParallel")
+  
+  impute <- foreach(i=1:NROW(list_of_files), .combine = 'rbind', .packages = packages_needed) %dopar% {
+    sample_matrix <- read.table(list_of_files[i], header=TRUE, sep="\t")
+    sample_matrix <- as.data.frame(sample_matrix) %>%
+      column_to_rownames(var="Protein")
+        
+    sample_matrix_imputed <- missRanger(sample_matrix, pmm.k = 3, splitrule = "extratrees", num.trees = 10, sample.fraction = 0.1, maxiter=10, seed=347)
+    return(sample_matrix_imputed)
+  }
+  sample_matrix_total <- impute
+  return(sample_matrix_total)
+}
+
+suppressMessages(suppressWarnings(
+if (BATCH_CORRECT_FIRST) {
+  sample_matrix.imputed_logged <- sample_matrix.logged
+  sample_long.imputed_logged <- sample_long.logged
+  
+  # Run both within and across batches
+  sample_long.imputed_logged_bc <- correct_batch_effects_df(
+    df_long = sample_long.imputed_logged,
+    batch_col = BATCH_COL,
+    sample_annotation = annotation_data,
+    discrete_func = 'ComBat',
+    continuous_func = 'loess_regression', 
+    abs_threshold = 5,
+    pct_threshold = 0.20
+  )
+
+  # Run across batch only
+  sample_long.imputed_logged_bc_across <- correct_batch_effects_df(
+    df_long = sample_long.imputed_logged,
+    batch_col = BATCH_COL,
+    sample_annotation = annotation_data,
+    discrete_func = 'ComBat',
+    continuous_func = NULL, 
+    abs_threshold = 5,
+    pct_threshold = 0.20
+  )
+  
+  sample_matrix.imputed_logged_bc <- long_to_matrix(sample_long.imputed_logged_bc) # convert back from long to matrix format
+  sample_matrix.imputed_logged_bc_across <- long_to_matrix(sample_long.imputed_logged_bc_across) # convert back from long to matrix format
+  
+  # Export Pre imputed values
+  results_matrix <- unlog_dm(sample_matrix.imputed_logged, log_base = 2, offset = 1) # unlog
+  results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_before_preimpute.tsv")), sep="\t", row.names=F, quote=F) # export to file
+
+  results_matrix <- unlog_dm(sample_matrix.imputed_logged_bc, log_base = 2, offset = 1) # unlog
+  results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_after_preimpute.tsv")), sep="\t", row.names=F, quote=F) # export to file
+
+  results_matrix <- unlog_dm(sample_matrix.imputed_logged_bc_across, log_base = 2, offset = 1) # unlog
+  results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_after_combat_preimpute.tsv")), sep="\t", row.names=F, quote=F) # export to file
+
+  # split sample_matrix.imputed_logged
+  for_split1 <- sample_matrix.imputed_logged
+  for_split1 <- tibble::rownames_to_column(for_split1, "row_names") 
+  colnames(for_split1)[1] <- "Protein"
+  split_input_data(for_split1, "split1", OUTPUT_DIR, OUTFILE_PREFIX)
+  list_of_files1 <- list.files(path=file.path(OUTPUT_DIR), pattern=glob2rx("*_split1_*.tsv"), full.names=TRUE, recursive=FALSE)
+  #print(list_of_files1)
+
+  # split sample_matrix.imputed_logged_bc
+  for_split2 <- as.data.frame(sample_matrix.imputed_logged_bc)
+  for_split2 <- tibble::rownames_to_column(for_split2, "row_names") 
+  colnames(for_split2)[1] <- "Protein"
+  split_input_data(for_split2, "split2", OUTPUT_DIR, OUTFILE_PREFIX)
+  list_of_files2 <- list.files(path=file.path(OUTPUT_DIR), pattern=glob2rx("*_split2_*.tsv"), full.names=TRUE, recursive=FALSE)
+  #print(list_of_files2)
+  
+  # split sample_matrix.imputed_logged_bc_across
+  for_split3 <- as.data.frame(sample_matrix.imputed_logged_bc_across)
+  for_split3 <- tibble::rownames_to_column(for_split3, "row_names")
+  colnames(for_split3)[1] <- "Protein"
+  split_input_data(for_split3, "split3", OUTPUT_DIR, OUTFILE_PREFIX)
+  list_of_files3 <- list.files(path=file.path(OUTPUT_DIR), pattern=glob2rx("*_split3_*.tsv"), full.names=TRUE, recursive=FALSE)
+  #print(list_of_files3)
+
+  e <- new.env()
+  e$libs <- c("/hpc/home/sundararamn/R/x86_64-pc-linux-gnu-library/3.6", .libPaths())
+  n.cores <- parallel::detectCores() - 1
+  my.cluster <- parallel::makeCluster(n.cores)
+  doParallel::registerDoParallel(cl = my.cluster, type="FORK")
+  clusterExport(my.cluster, "libs", envir=e)
+  clusterEvalQ(my.cluster, .libPaths(libs))
+  sample_matrix.imputed_logged <- impute_on_split_data(list_of_files1)
+  sample_matrix.imputed_logged_bc <- impute_on_split_data(list_of_files2)
+  sample_matrix.imputed_logged_bc_across <- impute_on_split_data(list_of_files3)
+  parallel::stopCluster(cl = my.cluster)
+
+  #sample_matrix.imputed_logged <- nafunctions(sample_matrix.imputed_logged, IMPUTATION_METHOD)
+  sample_long.imputed_logged <- matrix_to_long(sample_matrix.imputed_logged)
+  
+  #sample_matrix.imputed_logged_bc <- nafunctions(sample_matrix.imputed_logged_bc, IMPUTATION_METHOD)
+  sample_long.imputed_logged_bc <- matrix_to_long(sample_matrix.imputed_logged_bc) 
+  
+  #sample_matrix.imputed_logged_bc_across <- nafunctions(sample_matrix.imputed_logged_bc_across, IMPUTATION_METHOD)
+  sample_long.imputed_logged_bc_across <- matrix_to_long(sample_matrix.imputed_logged_bc_across) 
+  
+  # Export Pre imputed values
+  results_matrix <- unlog_dm(sample_matrix.imputed_logged, log_base = 2, offset = 1) # unlog
+  results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_before_postimpute.tsv")), sep="\t", row.names=F, quote=F) # export to file
+
+  results_matrix <- unlog_dm(sample_matrix.imputed_logged_bc, log_base = 2, offset = 1) # unlog
+  results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_after_postimpute.tsv")), sep="\t", row.names=F, quote=F) # export to file
+
+  results_matrix <- unlog_dm(sample_matrix.imputed_logged_bc_across, log_base = 2, offset = 1) # unlog
+  results_matrix <- cbind(rownames(results_matrix), results_matrix) # unset rownames as protein names (see above)
+  colnames(results_matrix)[1] <- "Protein" # Bring back protein column (see above)
+  write.table(results_matrix, file = file.path(OUTPUT_DIR, paste0(OUTFILE_PREFIX, "_after_combat_postimpute.tsv")), sep="\t", row.names=F, quote=F) # export to file
+  
+  unlink(list_of_files1)
+  unlink(list_of_files2)
+  unlink(list_of_files3)
+
+} else {
+  e <- new.env()
+  e$libs <- c("/hpc/home/sundararamn/R/x86_64-pc-linux-gnu-library/3.6", .libPaths())
+  n.cores <- parallel::detectCores() - 1
+  my.cluster <- parallel::makeCluster(n.cores)
+  doParallel::registerDoParallel(cl = my.cluster, type="FORK")
+  clusterExport(my.cluster, "libs", envir=e)
+  clusterEvalQ(my.cluster, .libPaths(libs))
+  sample_matrix.imputed_logged <- nafunctions(sample_matrix.logged, IMPUTATION_METHOD)
+  sample_long.imputed_logged <- matrix_to_long(sample_matrix.imputed_logged) 
+  parallel::stopCluster(cl = my.cluster)
+  
+  # Run both within and across batches
+  sample_long.imputed_logged_bc <- correct_batch_effects_df(
+    df_long = sample_long.imputed_logged,
+    batch_col = BATCH_COL,
+    sample_annotation = annotation_data,
+    discrete_func = 'ComBat',
+    continuous_func = 'loess_regression', 
+    abs_threshold = 5,
+    pct_threshold = 0.20
+  )
+
+  # Run across batch only
+  sample_long.imputed_logged_bc_across <- correct_batch_effects_df(
+    df_long = sample_long.imputed_logged,
+    batch_col = BATCH_COL,
+    sample_annotation = annotation_data,
+    discrete_func = 'ComBat',
+    continuous_func = NULL, 
+    abs_threshold = 5,
+    pct_threshold = 0.20
+  )
+
+  sample_matrix.imputed_logged_bc <- long_to_matrix(sample_long.imputed_logged_bc) # convert back from long to matrix format
+  sample_matrix.imputed_logged_bc_across <- long_to_matrix(sample_long.imputed_logged_bc_across) # convert back from long to matrix format
+  
+  unlink(list_of_files1)
+}
+))
+
+```
+
+## Normalization {.tabset}
+```{r Normalization_text, echo=F, results='asis', message=FALSE, warning=FALSE}
+cat("\n\n Compare how normalization changes the intensity of the data to remove random noise and variability accross multiple samples. \n\n", sep="")
+```
+
+### Before normalization
+```{r Normalization1, fig.width=15, echo=F, results='hide' ,fig.keep='all', message=FALSE, warning=FALSE}
+# log transform 
+sample_unnorm_long.logged <- log_transform_df(sample_unnorm_long, log_base = 2, offset = 1)
+# Merge with annotation to get batch annotation
+    sample_unnorm_long.logged[["attribute_ExperimentalGroup"]] <- annotation_data[["attribute_ExperimentalGroup"]][match(sample_unnorm_long.logged$FullRunName, annotation_data$FullRunName)]
+# order by batch and factor to plot in batch order
+sample_unnorm_long.logged <- sample_unnorm_long.logged[order(sample_unnorm_long.logged[["attribute_ExperimentalGroup"]]),]
+sample_unnorm_long.logged$FullRunName = factor(sample_unnorm_long.logged$FullRunName, levels=unique(sample_unnorm_long.logged$FullRunName))
+
+print(plot_boxnorm(sample_unnorm_long.logged, color_list, "attribute_ExperimentalGroup"))
+
+#pbox_before <- plot_boxplot(
+#    sample_unnorm_long.logged,
+#    color_scheme = color_list[[BATCH_COL]],
+#    annotation_data,
+#    batch_col = BATCH_COL,
+#    plot_title = "Before Normalization"
+#) + geom_boxplot(color="grey30")
+#print(pbox_before)
+```
+
+### After normalization
+```{r Normalization2, fig.width=15, echo=F, results='hide' ,fig.keep='all', message=FALSE, warning=FALSE}
+# log transform
+sample_norm_long.logged <- log_transform_df(sample_norm_long, log_base = 2, offset = 1)
+# Merge with annotation to get batch annotation
+sample_norm_long.logged[["attribute_ExperimentalGroup"]] <- annotation_data[["attribute_ExperimentalGroup"]][match(sample_norm_long.logged$FullRunName, annotation_data$FullRunName)]
+# order by batch and factor to plot in batch order
+sample_norm_long.logged <- sample_norm_long.logged[order(sample_norm_long.logged[["attribute_ExperimentalGroup"]]),]
+sample_norm_long.logged$FullRunName = factor(sample_norm_long.logged$FullRunName, levels=unique(sample_norm_long.logged$FullRunName))
+
+print(plot_boxnorm(sample_norm_long.logged, color_list, "attribute_ExperimentalGroup"))
+
+#pbox_after <- plot_boxplot(
+#    sample_norm_long.logged,
+#    color_scheme = color_list[[BATCH_COL]],
+#    annotation_data,
+#    batch_col = BATCH_COL,
+#    plot_title = "After Normalization"
+#) + geom_boxplot(color="grey30")
+#print(pbox_after)
+```
+
+## PCA plots {.tabset}
+```{r PCA PLOT, echo=F, results='asis', message=FALSE, warning=FALSE}
+cat("\n\n PCA plots to visualize the effect of batch correction\n\n", sep="")
+```
+
+### Before Batch Correction
+```{r PCA Before batch correction, echo=F, fig.width=15, results='hide', message=FALSE, warning=FALSE}
+pltList <- list()
+for( i in plot_for_pca ){
+# Create plot name.
+pltName <- i
+pltList[[ pltName ]] <- plot_PCA(sample_matrix.imputed_logged, annotation_data, color_by = i,
+                plot_title = i, color_scheme = color_list[[i]], width = 5, height = 5, units = c("in"))
+}
+plot <- grid.arrange(grobs=pltList, ncol=2, top = text_grob("Before Batch Correction", color = "black", face = "bold", size = 18))
+#print(annotate_figure(plot, top = text_grob("Before Batch Correction", color = "black", face = "bold", size = 18)))
+```
+
+### After Combat Only Batch Correction
+```{r PCA After combat only batch correction, echo=F, fig.width=15, results='hide', message=FALSE, warning=FALSE}
+pltList <- list()
+for( i in plot_for_pca ){
+# Create plot name.
+pltName <- i
+pltList[[ pltName ]] <- plot_PCA(sample_matrix.imputed_logged_bc_across, annotation_data, color_by = i,
+                plot_title = i, color_scheme = color_list[[i]], width = 5, height = 5, units = c("in"))
+}
+plot <- grid.arrange(grobs=pltList, ncol=2, top = text_grob("After Combat Only Batch Correction", color = "black", face = "bold", size = 18))
+#print(annotate_figure(plot, top = text_grob("After Combat Only Batch Correction", color = "black", face = "bold", size = 18)))
+```
+
+### After Combat and Loess Batch Correction
+```{r PCA After combat and loess batch correction, fig.width=15, echo=F, results='hide', message=FALSE, warning=FALSE}
+pltList <- list()
+for( i in plot_for_pca ){
+# Create plot name.
+pltName <- i
+pltList[[ pltName ]] <- plot_PCA(sample_matrix.imputed_logged_bc, annotation_data, color_by = i,
+                plot_title = i, color_scheme = color_list[[i]], width = 5, height = 5, units = c("in"))
+}
+plot <- grid.arrange(grobs=pltList, ncol=2,  top = text_grob("After Combat and Loess Batch Correction", color = "black", face = "bold", size = 18))
+#print(annotate_figure(plot, top = text_grob("After Combat and Loess Batch Correction", color = "black", face = "bold", size = 18)))
+```
+
+## PVCA plots {.tabset}
+```{r PVCA PLOT, echo=F, results='asis', message=FALSE, warning=FALSE}
+cat("\n\n PVCA plots to visualize the effect of batch correction\n\n", sep="")
+```
+
+### Before Batch Correction
+```{r PVCA before batch correction, echo=F, results='hide', message=FALSE, warning=FALSE}
+pvca_before <- plot_PVCA(
+  sample_matrix.imputed_logged,
+  annotation_data,
+  technical_factors = technical_factors,
+  biological_factors = biological_factors,
+plot_title = "Before Batch Correction"
+)
+plot <- pvca_before
+print(annotate_figure(plot, top = text_grob("Before Batch Correction", 
+        color = "black", face = "bold", size = 15)))
+```
+  
+### After Combat Only Batch Correction
+```{r PVCA After Combat Only Batch Correction, echo=F, results='hide', message=FALSE, warning=FALSE}
+  pvca_after_across <- plot_PVCA(
+    sample_matrix.imputed_logged_bc_across,
+    annotation_data,
+    technical_factors = technical_factors,
+    biological_factors = biological_factors,
+	plot_title = "After Combat Only Batch Correction"
+  )
+  plot <- pvca_after_across
+  print(annotate_figure(plot, top = text_grob("After Combat Only Batch Correction", 
+               color = "black", face = "bold", size = 15)))
+```
+
+### After Combat and Loess Batch Correction
+```{r PVCA After Combat and Loess Batch Correction, echo=F, results='hide', message=FALSE, warning=FALSE}
+  pvca_after <- plot_PVCA(
+    sample_matrix.imputed_logged_bc,
+    annotation_data,
+    technical_factors = technical_factors,
+    biological_factors = biological_factors,
+	plot_title = "After Combat and Loess Batch Correction"
+  )
+plot <- pvca_after
+print(annotate_figure(plot, top = text_grob("After Combat and Loess Batch Correction", 
+               color = "black", face = "bold", size = 15)))
+```
+
+## iRT plots {.tabset}
+```{r iRT PLOT, echo=F, results='asis', message=FALSE, warning=FALSE}
+cat("\n\n iRT plots to visualize the effect of batch correction\n\n", sep="")
+```
+
+### Before Batch Correction
+```{r iRT Before Batch Correction, echo=F, results='hide', message=FALSE, warning=FALSE}
+psi_before <- plot_spike_in(sample_long.imputed_logged, annotation_data,
+              peptide_annotation =fragment_annotation,
+              protein_col = 'Protein', spike_ins = iRT_protein,
+              plot_title = 'Before Batch Correction',
+              color_by_batch = TRUE, batch_col = BATCH_COL, color_scheme = color_list[[BATCH_COL]])
+print(psi_before)
+```
+
+### After Combat Only Batch Correction
+```{r iRT After Combat Only Batch Correction, echo=F, results='hide', message=FALSE, warning=FALSE}
+psi_after_combat <- plot_spike_in(sample_long.imputed_logged_bc_across, annotation_data,
+                peptide_annotation =fragment_annotation,
+                protein_col = 'Protein', spike_ins = iRT_protein,
+                plot_title = 'Fragments - After Combat Only Batch Correction Only',
+                color_by_batch = TRUE, batch_col = BATCH_COL, color_scheme = color_list[[BATCH_COL]])
+print(psi_after_combat)
+```
+
+### After Combat and Loess Batch Correction
+```{r iRT After Combat and Loess Batch Correction, echo=F, results='hide', message=FALSE, warning=FALSE}
+psi_after_batch <- plot_spike_in(sample_long.imputed_logged_bc, annotation_data,
+              peptide_annotation =fragment_annotation,
+              protein_col = 'Protein', spike_ins = iRT_protein,
+              plot_title = 'Fragments - After Combat and Lowess Batch Correction',
+              color_by_batch = TRUE, batch_col = BATCH_COL, color_scheme = color_list[[BATCH_COL]])
+print(psi_after_batch)
+```
+
+```{r Coorelation Heatmaps, echo=F, results='asis', message=FALSE, warning=FALSE}
+for (i in seq_along(sample_for_correlation)) {
+  sample_element <- sample_for_correlation[i]
+  col_element <- column_for_correlation[i]
+   
+  dr_replicate_filenames <- annotation_data %>%
+    dplyr::filter(attribute_ExperimentalGroup %in% sample_element) %>%
+    dplyr::arrange(attribute_ExperimentalGroup, !!as.symbol(col_element)) %>%
+    pull(!!sym('FullRunName'))
+
+  replicate_filenames = as.character(dr_replicate_filenames)
+  
+  anno_for_corr <- annotation_data %>%
+    dplyr::filter(FullRunName %in% replicate_filenames) %>%
+    dplyr::select(FullRunName, col_element) %>%
+    dplyr::group_by(across(all_of(col_element)))  %>%
+    dplyr::arrange(across(all_of(col_element)))
+  
+  cat("\n\n## Correlation: ", col_element, " {.tabset}\n\n", sep="")
+  cat("\n\n### Before Batch Correction\n\n", sep="")
+  p1 = plotly_corr(sample_matrix.imputed_logged, anno_for_corr, col_element, replicate_filenames, color_list)
+  print(htmltools::tagList(ggplotly(p1)))
+
+  #p1 = plot_sample_corr_heatmap(sample_matrix.imputed_logged,
+                              #samples_to_plot = replicate_filenames,
+                              #sample_annotation = annotation_data,
+                              #factors_to_plot = factors_to_show,
+                              #plot_title = 'Before Batch Correction',
+                              #color_list = color_list,
+                              #heatmap_color = heatmap_colors, breaks = breaksList,
+                              #cluster_rows= FALSE, cluster_cols=FALSE,fontsize = 11,
+                              #annotation_names_col = TRUE, annotation_legend = FALSE, show_colnames = FALSE)
+
+  cat("\n\n### After Combat Only Batch Correction\n\n", sep="")
+  p2 = plotly_corr(sample_matrix.imputed_logged_bc_across, anno_for_corr, col_element, replicate_filenames, color_list)
+  print(htmltools::tagList(ggplotly(p2)))
+  #p2 = plot_sample_corr_heatmap(sample_matrix.imputed_logged_bc_across,
+                              #samples_to_plot = replicate_filenames,
+                              #sample_annotation = annotation_data,
+                              #factors_to_plot = factors_to_show,
+                              #plot_title = 'After Combat Only Batch Correction',
+                              #color_list = color_list,
+                              #heatmap_color = heatmap_colors, breaks = breaksList,
+                              #cluster_rows= FALSE, cluster_cols=FALSE,fontsize = 11,
+                              #annotation_names_col = TRUE, annotation_legend = FALSE, show_colnames = FALSE)
+  #p2
+  
+  cat("\n\n### After Combat and Loess Batch Correction\n\n", sep="")
+  p3 = plotly_corr(sample_matrix.imputed_logged_bc, anno_for_corr, col_element, replicate_filenames, color_list)
+  print(htmltools::tagList(ggplotly(p3)))
+  #p3 = plot_sample_corr_heatmap(sample_matrix.imputed_logged_bc,
+                              #samples_to_plot = replicate_filenames,
+                              #sample_annotation = annotation_data,
+                              #factors_to_plot = factors_to_show,
+                              #plot_title = 'After Combat and Loess Batch Correction',
+                              #color_list = color_list,
+                              #heatmap_color = heatmap_colors, breaks = breaksList,
+                              #cluster_rows= FALSE, cluster_cols=FALSE,fontsize = 11,
+                              #annotation_names_col = TRUE, annotation_legend = FALSE, show_colnames = FALSE)
+  #p3
+}
+```

@@ -11,7 +11,7 @@
 - [License](#license)
 
 ## What is BIRCH
-[BIRCH](https://birch-tool.herokuapp.com/) (**B**atch-effect **I**dentification, **R**epresentation and **C**orrection on **H**eterogeneous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. 
+[BIRCH](https://birch.cshs.org/) (**B**atch-effect **I**dentification, **R**epresentation and **C**orrection on **H**eterogeneous data) is a web-app that can be used for reducing batch-effect in proteomics data. It generally becomes necessary to correct for batch-effect in large datasets since processing steps such as sample preparation and data acquisition tends to add noise to the data, that in-turn effects biological conclusions. This tool aims at keeping meaningful biological variation, while simultaneously reducing batch-effect due to other external factors. 
 
 ## Requirements
 - Web Browser (Google Chrome, Mozilla Firefox, Microsoft Edge, Safari) with stable internet connection. 
@@ -97,6 +97,54 @@ The results tab is the final tab that is static and is loaded with all the final
 
 The final batch-corrected data (pre and post-imputation) can be downloaded in the "Downloads" sub-section in the results tab. Additionally, an HTML report that contains all the results/plots from the web-app can also be downloaded for convinience. 
 
+## Command line usage
+Protein data files (normalized and/or unnormalized) above 10MB are not accepted in the online BIRCH app in order to preserve and maintain the available computational resources. Use this command line version of BIRCH for bigger files using the following instructions.
+
+This command below uses render_report.R as a wrapper script for Probatch_Report.Rmd which is a R-Markdown script that produces the report with results from batch correction. Run the below command with the required and optional arguments to obtain a HTML report and batch-corrected data files in the output directory listed as one of the input arguments. 
+
+Command:
+Rscript render_report.R 
+        --input_norm /full/path/to/norm.txt  
+        --input_unnorm /full/path/to/unnorm.txt 
+        --metadata_annotation /full/path/to/anno.txt 
+        --output_dir /full/path/to/outdir 
+        --outfile_prefix "chosen_prefix" 
+        --batch_column "chosen_batch" 
+        --imputation_method "ranger" 
+        --cols_of_interest "Digestion_batch,MS_batch" 
+        --samples_for_correlation "DigRep:Digestion_batch,TechRep:MS_batch" 
+		--batch_correction_first 
+		--sample_threshold 0.99 
+		--expgroup_threshold 0.5 
+		--batch_threshold 0.99 
+        --iRT_protein_name "1/iRT_protein"
+
+Arguments:
+1. "-N", "--input_norm", Input sample normalized data file (required)
+2. "-n", "--input_unnorm", Input sample UNnormalized data file (required)
+3. "-m", "--metadata_annotation", Input annotation file for metadata. (required)
+4. "-r", "--iRT_annotation", Input file with two columns 'Protein' and 'peptide_group_label' identifying iRT 
+5. "-o", "--output_dir", Specify the output directory. Use absolute path. (required)
+6. "-v", "--outfile_prefix", Filename prefix for the output files
+7. "-b", "--batch_column, default="Digestion_batch", Which annotation file column will batch correction be performed on? Either 'Digestion_batch' or 'MS_batch'. 
+8. "-c", "--cols_of_interest", default="Digestion_batch,MS_batch", Comma separated list of columns to consider.
+9. "-s", "--sample_threshold", Keep only the samples with at least X% of data available across samples, default 0.7 (70%)
+10. "-e", "--expgroup_threshold", Keep only features with at least X% of data available across any experimental group, default 0.5 (50%)
+11. "-t", "--batch_threshold", Keep only features with at least X% of data available across all batches, default 0.7 (70%)
+12. "-p", "--samples_for_correlation, Digestion and Technical Rep Sample keywords from attribute_experimental group along with column to plot
+13. "-i", "--imputation_method", ranger is the only option and it needs to be specified as an argument. 
+14. "--iRT_protein_name", Name of the iRT peptide, default 'irt_protein'
+15. "-q", "--quantile_norm", default=FALSE, When flag is set, perform quantile normalization instead of using norm input file.
+16. "-B", "--batch_correction_first", default=FALSE, When flag is set, perform batch correction before imputation. By default, performs imputation before batch correction.
+
+
+Important notes: 
+1) Normalized file is required prior to running the script. If normalized file doesn't exist, provide the same file for norm and unnorm file, and make sure to include the quantile norm option in the command. 
+2) Only "ranger" is available as the imputation method. 
+3) Should have decided on the column or batch to correct on, one column can be corrected at a time. 
+4) Annotation should have "attribute_ExperimentalGroup", "Level3", "order"
+5) Unnorm and norm files should have "Protein"
+
 ## Cite us
 
 ## Support
@@ -108,6 +156,11 @@ For any other queries, email us at GroupHeartBioinformaticsSupport@cshs.org.
 - Initial version released.
 - Three input files required.
 - Displays whether combat only or combat+loess should be used for downstream analysis. 
+
+### Version 2.0.2
+- Minimal filtering also removes samples present as singletons in a batch. 
+- Modified report to include take aways before and after filtering. 
+- Added take aways after filetring to the results tab. 
 
 ## License
 See the [LICENSE](https://github.com/csmc-vaneykjlab/pine/blob/master/LICENSE) file for license rights and limitations (Apache 2.0).

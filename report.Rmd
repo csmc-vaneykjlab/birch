@@ -17,6 +17,10 @@ output:
 toc-title: "Table of Contents"
 
 params:
+  sample_matrix : sample_matrix
+  sample_matrix_filt : sample_matrix_filt
+  joined_df : joined_df
+  joined_df2 : joined_df2
   input_plot1_reac : input_plot1_reac
   balloon_plot_reac_report : balloon_plot_reac_report
   pareto_plot_reac : pareto_plot_reac
@@ -31,6 +35,7 @@ params:
   filtered_plot2_reac : filtered_plot2_reac
   missing_plots2_reac_report2 : missing_plots2_reac_report2
   filtered_plot4_reac : filtered_plot4_reac
+  init_table_reac2 : init_table_reac2
   unnorm_box_reac : unnorm_box_reac
   norm_box_reac : norm_box_reac
   pvca_before_bc_reac : pvca_before_bc_reac
@@ -61,6 +66,18 @@ $(document).ready(function() {
 });
 ```
 
+---
+## Introduction
+```{r ACBRI introduction, results='asis', echo=FALSE}
+cat("\n\n
+Hello and welcome! We are pleased to be trusted with your data and present to you a visual summary of your dataset.
+
+Batch effect correction is the procedure of removing variability from your data that is not due to your variable of interest. Batch effects are due to technical differences between your samples, such as the type of instrument or even the technician that ran the sample.
+
+For any concerns about or suggestions to improve this report, let the team know at **GroupHeartBioinformaticsSupport@cshs.org**, and we will consider your feedback. We are happy to support your computational needs.
+\n\n", sep="")
+```
+
 ```{r, include = FALSE}
 if (identical(rmarkdown::metadata$runtime, "shiny"))
   shiny::setProgress(0.25)  # set progress to 50%
@@ -71,12 +88,12 @@ htmltools::tagList(plotly::ggplotly(ggplot()))
 
 ## Initial analysis {.tabset}
 ### Sample distribution
-```{r, include = TRUE}
+```{r, include = TRUE, echo=F, results='asis', message=FALSE, warning=FALSE, fig.width=16, fig.height=8}
 grid.draw(params$input_plot1_reac)
 ```
 
 ### Sample matrix
-```{r, include = TRUE, results="asis"}
+```{r, include = TRUE, echo=F, results='asis', message=FALSE, warning=FALSE}
 
 if (length(params$balloon_plot_reac_report) == 1) {
   params$balloon_plot_reac_report[[1]]
@@ -92,7 +109,7 @@ if (length(params$balloon_plot_reac_report) == 1) {
 ```
 
 ### Missingness distribution
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$pareto_plot_reac
 
 if (length(params$missing_plots2_reac_report) == 1) {
@@ -110,34 +127,53 @@ params$missing_plot3_reac
 ```
 
 ### Take aways
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 knitr::kable(params$init_table_reac)
+
+cat("\n\n Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) is ", toString(sum(params$joined_df$value)), "and the percent of missing data is ", toString(round((sum(params$joined_df$value)/(nrow(params$sample_matrix)*(ncol(params$sample_matrix)-1)))*100, 2)), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.", sep=" ")
+
 ```
 
 ## Filtering {.tabset}
 ### Fragments per Sample
-```{r}
+```{r echo=F, results='asis', message=FALSE, warning=FALSE}
 params$filt_plot1_reac
 ```
 
 ### Fragments per group
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$filt_plot2_reac
 ```
 
 ### Fragments per batch
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$filt_plot3_reac
 ```
 
 ## Filtered results {.tabset}
+### Filtered stats
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
+cat("\n\n __Number of samples:__")
+cat("\n\n Initial number of samples was: ", toString(ncol(params$sample_matrix)-1), sep=" ")
+cat("\n\n Number of samples remaining after filtering are: ", toString(ncol(params$sample_matrix_filt)-1), sep=" ")
+    
+cat("\n\n __Number of fragments:__")
+cat("\n\n Initial number of fragments was: ", toString(nrow(params$sample_matrix)), sep=" ")
+cat("\n\n Number of fragments remaining after filtering are: ", toString(nrow(params$sample_matrix_filt)), sep=" ")
+
+cat("\n\n __Missingness before/after filtering:__")
+cat("\n\n Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) was ", toString(sum(params$joined_df$value)), "and the percent of missing data was ", toString(round((sum(params$joined_df$value)/(nrow(params$sample_matrix)*(ncol(params$sample_matrix)-1)))*100, 2)), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.", sep=" ")
+
+cat("\n\n Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) after filtering is ", toString(sum(params$joined_df2$value)), "and the percent of missing data is ", toString(round((sum(params$joined_df2$value)/(nrow(params$sample_matrix_filt)*(ncol(params$sample_matrix_filt)-1)))*100, 2)), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.", sep="")
+```
+
 ### Sample distribution after filtering
-```{r, include = TRUE}
+```{r, include = TRUE, echo=F, results='asis', message=FALSE, warning=FALSE, fig.width=16, fig.height=8}
 grid.draw(params$filtered_plot1_reac)
 ```
 
 ### Sample matrix after filtering
-```{r, include = TRUE}
+```{r, include = TRUE, echo=F, results='asis', message=FALSE, warning=FALSE}
 
 if (length(params$balloon_plot_reac_report2) == 1) {
   params$balloon_plot_reac_report2[[1]]
@@ -154,7 +190,7 @@ if (length(params$balloon_plot_reac_report2) == 1) {
 ```
 
 ### Missingness after filtering
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$filtered_plot2_reac
 
 if (length(params$missing_plots2_reac_report2) == 1) {
@@ -171,9 +207,21 @@ if (length(params$missing_plots2_reac_report2) == 1) {
 params$filtered_plot4_reac
 ```
 
-### Normalization
-```{r}
+### Take aways
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
+knitr::kable(params$init_table_reac2)
+
+cat("\n\n Count of missingness within your entire dataset (i.e., cells in the matrix with NAs) is ", toString(sum(params$joined_df2$value)), "and the percent of missing data is ", toString(round((sum(params$joined_df2$value)/(nrow(params$sample_matrix_filt)*(ncol(params$sample_matrix_filt)-1)))*100, 2)), "%. This percentage of missingness in overall data should also be < 50% for effective batch correction.", sep=" ")
+```
+
+## Normalization {.tabset}
+### Before normalization
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$unnorm_box_reac
+```
+
+### After normalization
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$norm_box_reac
 
 if (identical(rmarkdown::metadata$runtime, "shiny"))
@@ -183,65 +231,65 @@ if (identical(rmarkdown::metadata$runtime, "shiny"))
 ## Batch corrected results 
 ## PVCA {.tabset}
 ### Before batch correction
-```{r}
-params$pvca_before_bc_reac
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
+params$pvca_before_bc_reac[[2]]
 ```
 
 ### After combat only correction
-```{r}
-params$pvca_after_across_bc_reac
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
+params$pvca_after_across_bc_reac[[2]]
 ```
 
 ### After combat+loess correction
-```{r}
-params$pvca_after_bc_reac
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
+params$pvca_after_bc_reac[[2]]
 ```
 
 ## PCA {.tabset}
 ### Before batch correction
-```{r, include = TRUE}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 grid.draw(params$pca_before_bc_reac)
 ```
 
 ### After combat only correction
-```{r, include = TRUE}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 grid.draw(params$pca_after_across_bc_reac)
 ```
 
 ### After combat+loess correction
-```{r, include = TRUE}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 grid.draw(params$pca_after_bc_reac)
 ```
 
 ## iRT mapping {.tabset}
 ### Before batch correction
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$irt_before_bc_reac
 ```
 
 ### After combat only correction
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$irt_after_across_bc_reac
 ```
 
 ### After combat+loess correction
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$irt_after_bc_reac
 ```
 
 ## Correlation {.tabset}
 ### Before batch correction
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$corr_before_bc_reac
 ```
 
 ### After combat only correction
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$corr_after_across_bc_reac
 ```
 
 ### After combat+loess correction
-```{r}
+```{r, echo=F, results='asis', message=FALSE, warning=FALSE}
 params$corr_after_bc_reac
 
 if (identical(rmarkdown::metadata$runtime, "shiny"))
