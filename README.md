@@ -100,6 +100,10 @@ The final batch-corrected data (pre and post-imputation) can be downloaded in th
 ## Command line usage
 Protein data files (normalized and/or unnormalized) above 10MB are not accepted in the online BIRCH app in order to preserve and maintain the available computational resources. Use this command line version of BIRCH for bigger files using the following instructions.
 
+Input file format is similar to the BIRCH app with the following exceptions:
+1) Annotation file should have the columns "attribute_ExperimentalGroup", "Level3" and "order". These column headers are case sensitive so make sure to name the columns exactly as mentioned. 
+2) Unnorm and norm files should have the "Protein" column with protein names, and this should be the only column with text. The remaining columns should be intensity values per sample. 
+
 This command below uses render_report.R as a wrapper script for Probatch_Report.Rmd which is a R-Markdown script that produces the report with results from batch correction. Run the below command with the required and optional arguments to obtain a HTML report and batch-corrected data files in the output directory listed as one of the input arguments. 
 
 Command:
@@ -142,8 +146,7 @@ Important notes:
 1) Normalized file is required prior to running the script. If normalized file doesn't exist, provide the same file for norm and unnorm file, and make sure to include the quantile norm option in the command. 
 2) Only "ranger" is available as the imputation method. 
 3) Should have decided on the column or batch to correct on, one column can be corrected at a time. 
-4) Annotation should have "attribute_ExperimentalGroup", "Level3", "order"
-5) Unnorm and norm files should have "Protein"
+4) Follow input file format guidelines mentioned above. 
 
 ## Cite us
 
