@@ -1172,6 +1172,8 @@ server <- function(input, output, session) {
           div(style="text-align:center;margin-top: 20px",
               a(href='#',
                 img(src = "workflow.PNG", height = 600, width = 300))),
+          div(style="width:fit-content;width:-webkit-fit-content;width:-moz-fit-content;font-size:100%;margin-top:10px",
+              HTML("<b>IMPORTANT NOTE: </b> In order to optimally control the computational load, the maximum upload limit is 10 MB each for normalized and unnormalized protein intensity data. If your data exceeds the set limit, kindly use the command line version of BIRCH as detailed in the GitHub link below. If you face any issues, feel free to email us and we will try our best to get back to you ASAP.")),
           div(style="text-align:center;margin-top: 20px",
               a(href="https://github.com/csmc-vaneykjlab/BatchCorrectionTool", class="btn btn-default",
                 "GitHub"),
